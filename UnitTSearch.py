@@ -30,8 +30,9 @@ class TestDataHandler(unittest.TestCase):
 
         # Create an instance of DiscogsSearch and pass data_handler to it
         discogs_search = DiscogsSearch(test_url, data_handler)
-        discogs_search.search_page_user_interaction()
-        discogs_search.search_page_user_interaction()
+        discogs_search.user_interaction()
+        #discogs_search.search_page_user_interaction()
+        #discogs_search.search_page_user_interaction()
         discogs_search.data_handler.save_dataframe()
         # At this point, data_handler's DataFrame should be updated with the content
         #data_handler.display_dataframe()

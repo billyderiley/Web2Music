@@ -70,15 +70,12 @@ class DiscogsSearchScraper(BaseScraper):
                 if h2_.findNext('div', class_='more_facets_dialog') is None:
                     __intermediate_level__ = h2_.findNext('ul', class_='no_vertical facets_nav')
                     facets_nav_uls = [__intermediate_level__]
-                    print("more facets is none")
 
                 else:
                     __intermediate_level__ = h2_.findNext('div', class_="more_facets_dialog")
                     facets_nav_uls = __intermediate_level__.find_all('ul')
-                    print("more facets is not none")
 
             header_name = h2_.getText()
-            print("checkme123")
             self.search_options_dict[header_name] = {}
             aside_navbar_content[header_name] = {}
             for ul in facets_nav_uls:
@@ -110,11 +107,11 @@ class DiscogsSearchScraper(BaseScraper):
                 title = aria_label_parts[1].strip()
 
                 # Check if the title already exists in the releases
-                if not any(release['Release Titles'] == title for release in center_releases_content):
+                if not any(release['Discogs_Titles'] == title for release in center_releases_content):
                     release_info = {
-                        "Release Artists": artist,
-                        "Release Titles": title,
-                        "Discogs Url": self.base_discogs_url+href
+                        "Discogs_Artists": artist,
+                        "Discogs_Titles": title,
+                        "Discogs_URLS": self.base_discogs_url+href
                     }
                     center_releases_content.append(release_info)
         return center_releases_content
@@ -175,9 +172,23 @@ class DiscogsSearch(DiscogsSearchScraper):
             for nested_key, nested_value in nested_dict.items():
                 print(f"    Nested Key: {nested_key}, Nested Value: {nested_value}")
 
+    def user_interaction(self):
+        u_i = ''
+        while u_i != "Q":
+            u_i = input("Enter Q to Quit, or any other key to continue")
+            switch = {
+                '+': self.search_page_user_interaction(),
+                '-': self.data_handler.display_dataframe(),
+                '*': self.data_handler.fill_in_blanks()
+            }
+            switch.get(u_i, 'Choose one of the following operator:+,-,*')
+
+
     def search_page_user_interaction(self):
         print(f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]}")
         print([f"{i}: {label_type}" for i, label_type in enumerate(self.search_options_dict.keys(), 1)])
+        if len(self.search_options_dict.keys()) == 0:
+            return
         enter_key1 = int(input(""))-1 #-1 to get index number
         #print(self.search_options_dict[enter_key1])
         items = list(self.search_options_dict.items())
@@ -187,8 +198,6 @@ class DiscogsSearch(DiscogsSearchScraper):
         enter_key2 = int(input(""))-1
         items = list(self.search_options_dict[key].items())
         add_filter, value2 = items[enter_key2]
-        print(add_filter)
-        print("whats this")
         #print(self.search_options_dict[key][key2])
         new_search_term = self.search_options_dict[key][add_filter]
         new_discogs_search_url = self.base_discogs_url+new_search_term
@@ -377,7 +386,9 @@ class DataHandler:
     def __init__(self, df = None, csv_file = None):
         if csv_file is None:
             if df is None:
-                self.df = pd.DataFrame(columns=["Release Artists", "Release Titles", "Discogs Url"])
+                self.df = pd.DataFrame(columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs", "Discogs_URLS",
+                                                "Discogs_Formats", "Discogs_YouTube_Videos"])
             else:
                 self.df = df
         else:
@@ -395,7 +406,12 @@ class DataHandler:
 
         # Concatenate new_df with self.df and drop duplicates
         self.df = pd.concat([self.df, new_df], ignore_index=True).drop_duplicates(
-            subset=["Release Artists", "Release Titles", "Discogs Url"])
+            subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs", "Discogs_URLS",
+                                                "Discogs_Formats",  "Discogs_YouTube_Videos"])
+    def fill_in_blanks(self):
+        for x in self.df.Discogs_URLS:
+            pass
 
     def display_dataframe(self):
         print(self.df)
