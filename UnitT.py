@@ -37,7 +37,7 @@ class TestDiscogsSearch(unittest.TestCase):
         test_url = discogs_base_url
         self.Discogs_Search = DiscogsSearch(test_url)
         #self.Discogs_Search.get_search_options()  ###must call parse aside cotent before gettnig search options
-        self.Discogs_Search.search_page_user_interaction()
+        self.Discogs_Search.user_interaction_add_filters()
 
 class TestDiscogsReleaseScraper(unittest.TestCase):
 
