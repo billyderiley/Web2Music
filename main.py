@@ -251,6 +251,10 @@ class DiscogsSearch(DiscogsSearchScraper):
     def updateDataFrame(self):
         self.data_handler.update_dataframe(self.center_releases_content)
 
+    #def update_center_releases_content(self, center_releases_content):
+    #    self.center_releases_content = center_releases_content
+
+
     def updateCurrentPageAndNextPage(self):
         self.current_page = self.get_current_page_from_url(self.current_url)
         self.next_page = self.get_next_search_page_url(self.current_url)
@@ -284,6 +288,7 @@ class DiscogsSearch(DiscogsSearchScraper):
                 end_number = start_number
                 start_number = ___start_number
             end_number = end_number + 1
+            #
             return [self.create_url_from_page_number(new_discogs_search_url, str(page_num)) for page_num in range(start_number, end_number)]
 
     def user_interaction(self):
@@ -344,6 +349,7 @@ class DiscogsSearch(DiscogsSearchScraper):
             print(f"Navigating to : \n {search_page_url}")
             self.fetchSearchPageContent(search_page_url)
             self.updateDataFrame()
+
 
     def fetchSearchPageContent(self, new_discogs_search_url):
         aside_navbar_content, center_releases_content, applied_filters = self.get_search_page_content(new_discogs_search_url)
