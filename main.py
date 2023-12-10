@@ -64,6 +64,10 @@ class DiscogsSearchScraper(BaseScraper):
         applied_filters_html = left_side_menu_html.find('ul', class_='explore_filters facets_nav selected_facets')
         if applied_filters_html is not None:
             applied_filters = [li.text for li in applied_filters_html.find_all('li')]
+            applied_filters = self.clean_applied_filters(applied_filters)
+            first_filt_words = [x.split('+')[0] for x in applied_filters]
+        else:
+            first_filt_words = []
         left_side_facets = left_side_menu_html.find_all('h2', class_="facets_header")
         #applied_filters_bool = len(left_side_facets) == 6
         for i, h2_ in enumerate(left_side_facets):
@@ -90,8 +94,34 @@ class DiscogsSearchScraper(BaseScraper):
                 try:
                     for li in ul.find_all('li'):
                         facet_name = li.find('span', class_='facet_name').text
+                        print('check this out')
+                        #print(facet_name)
+                        facet_name_spaces_replace = facet_name.replace(' ', '+')
+                        print(facet_name_spaces_replace)
+                        print(applied_filters)
+                        # check if the facet_name_spaces_replace is in any of the string values in applied_filters
+                        if any(facet_name_spaces_replace in x for x in applied_filters):
+                            print("yes")
+
+                        #if facet_name_spaces_replace in [x for x in applied_filters].any() is True
+
                         href = li.find('a')['href']
                         search_term = href.split('?')[-1]
+                        print(search_term)
+                        __search_term = search_term.split('=')
+                        ____search_term = [term.split('&') for term in __search_term]
+                        print(____search_term)
+                        # code to flatten list ____search_term into a single 1 dimensional list
+                        new_applied_filters_list = [item for sublist in ____search_term for item in sublist]
+                        # if new_applied_filters_list equal or larger than 4
+                        if len(new_applied_filters_list) >= 2:
+                            # check if every second item in the list is in applied_filters
+                            if all(new_applied_filters_list[i] in applied_filters for i in range(1, len(new_applied_filters_list), 2)):
+                                print("yes")
+
+                        print(new_applied_filters_list)
+
+
                         aside_navbar_content[header_name][facet_name] = href
                 except AttributeError:
                     pass
@@ -202,8 +232,36 @@ class DiscogsSearchScraper(BaseScraper):
         new_search_term = self.search_dict_get()[label_type][search_term]
         return new_search_term
 
+    def clean_applied_filters(self, applied_filters):
+        if type(applied_filters) is not list:
+            applied_filters = [applied_filters]
+        clean_applied_filters = []
+        for filt in applied_filters:
+                #applied_filters.remove(filt)
+            while filt.startswith(' ') or filt.startswith('\n'):
+                filt = filt.lstrip(' ')
+                filt = filt.lstrip('\n')
+            while filt.endswith(' ') or filt.endswith('\n'):
+                filt = filt.rstrip(' ')
+                filt = filt.rstrip('\n')
+            # code to transform any spaces into +
+            filt = filt.replace(' ', '+')
+            clean_applied_filters.append(filt)
+            #i need the code to get the search term from the applied filter
 
 
+        return clean_applied_filters
+
+
+    def updateAppliedFilters(self, applied_filters):
+        a_f_url_term = self.search_options_dict
+        if type(applied_filters) is list:
+            clean_applied_filters = self.clean_applied_filters(applied_filters)
+            self.applied_filters = clean_applied_filters
+        else:
+            unclean_applied_filters = [applied_filters]
+            clean_applied_filters = self.clean_applied_filters(unclean_applied_filters)
+            self.applied_filters = clean_applied_filters
 
 
 
@@ -238,12 +296,6 @@ class DiscogsSearch(DiscogsSearchScraper):
     def updateCenterReleasesContent(self,center_releases_content):
         self.center_releases_content = center_releases_content
 
-    def updateAppliedFilters(self, applied_filters):
-        a_f_url_term = self.search_options_dict
-        if type(applied_filters) is list:
-            self.applied_filters = applied_filters
-        else:
-            self.applied_filters.append(applied_filters)
 
     def updateSearchOptions(self, aside_navbar_content):
         self.search_options_dict = aside_navbar_content
@@ -299,7 +351,8 @@ class DiscogsSearch(DiscogsSearchScraper):
             '3': self.data_handler.fill_in_blanks,
             '4': self.updateDataFrame,
             '5': self.saveDataFrameToCSV,
-            '6': self.user_interaction_select_pages
+            '6': self.user_interaction_select_pages,
+            '7': self.user_interaction_view_applied_filters
         }
         while u_i != "Q":
             print("1: Apply Filters Page \n"
@@ -307,7 +360,8 @@ class DiscogsSearch(DiscogsSearchScraper):
                   "3: Fill in DataFrame \n"
                   "4: Update DataFrame \n"
                   "5: Save DataFrame to CSV \n"
-                  "6: Select Mutiple Pages")
+                  "6: Select Mutiple Pages \n"
+                  "7: View Applied Filters \n")
             u_i = input("Enter Q to Quit, or any other key to continue: ")
 
 
@@ -320,7 +374,6 @@ class DiscogsSearch(DiscogsSearchScraper):
                 func()
             else:
                 print('Choose one of the following operators: +, -, *')
-
 
 
     def user_interaction_add_filters(self):
@@ -350,6 +403,8 @@ class DiscogsSearch(DiscogsSearchScraper):
             self.fetchSearchPageContent(search_page_url)
             self.updateDataFrame()
 
+    def user_interaction_view_applied_filters(self):
+        print(f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]}")
 
     def fetchSearchPageContent(self, new_discogs_search_url):
         aside_navbar_content, center_releases_content, applied_filters = self.get_search_page_content(new_discogs_search_url)
@@ -542,7 +597,7 @@ class DataHandler:
         if csv_file is None:
             if df is None:
                 self.df = pd.DataFrame(columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Terms", "Discogs_URLS",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_URLS",
                                                 "Discogs_Formats", "Discogs_YouTube_Videos"])
             else:
                 self.df = df
@@ -562,7 +617,7 @@ class DataHandler:
         # Concatenate new_df with self.df and drop duplicates
         self.df = pd.concat([self.df, new_df], ignore_index=True).drop_duplicates(
             subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Terms", "Discogs_URLS",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_URLS",
                                                 "Discogs_Formats",  "Discogs_YouTube_Videos"])
     def fill_in_blanks(self):
         for x in self.df.Discogs_URLS:
@@ -573,7 +628,7 @@ class DataHandler:
 
     def save_dataframe(self, save_as_file_name):
         if save_as_file_name is None:
-            save_as_file_name = "DATAFRAME_CSV_GENERIC_NAME"
+            save_as_file_name = "1DATAFRAME_CSV_GENERIC_NAME"
         self.df.to_csv(path_or_buf=save_as_file_name)
 
     def loadfromCSV(csv_file):

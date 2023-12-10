@@ -5,7 +5,6 @@ discogs_base_url = "https://www.discogs.com/search/"
 youtube_api_key = 'AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg' # Use this key in your application by passing it with the key=API_KEY parameter.
 
 class TestDiscogsSearch(unittest.TestCase):
-
     def test_set_up(self):
         test_url = discogs_base_url
         self.Discogs_Search = DiscogsSearch(test_url)
@@ -20,6 +19,7 @@ class TestDiscogsSearch(unittest.TestCase):
         self.Discogs_Search = DiscogsSearch(test_url)
         self.Discogs_Search.get_search_options()  ###must call parse aside cotent before gettnig search options
         #self.Discogs_Search.search_page_user_interaction()
+        #self.Discogs_Search.clean_applied_filters()
 
 
 class TestDataHandler(unittest.TestCase):
