@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import googleapiclient.discovery as youtube_api
+import random
 class BaseScraper:
     def __init__(self):
         self.df = self.createDF()
@@ -32,6 +33,7 @@ class BaseScraper:
 
     def get_Soup_from_url(self, base_url):
         try:
+            print(f"what is this {base_url}")
             SoupObj = self.Soupy_Url_Dict[base_url]
         except KeyError:
             SoupObj = self.createSoupObjFromUrl(base_url)
@@ -50,15 +52,16 @@ class DiscogsSearchScraper(BaseScraper):
     def get_search_page_content(self, base_url):
         #Base_Scraper = BaseScraper()
         SoupObj = self.get_Soup_from_url(base_url)
-        aside_navbar_content, applied_filters = self.get_aside_navbar_content(SoupObj)
+        aside_navbar_content, applied_filters, new_applied_filters_list = self.get_aside_navbar_content(SoupObj)
         center_releases_content = self.get_center_releases_content(SoupObj)
-        return aside_navbar_content, center_releases_content, applied_filters
+        return aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list
 
 
     def get_aside_navbar_content(self, SoupObj):
         #print("testing_aside_navbar_content")
         aside_navbar_content = {}
         applied_filters = []
+        new_applied_filters_list = []
         left_side_menu_html = SoupObj.find(id="page_aside")
         left_side_menu_html.find_all()
         applied_filters_html = left_side_menu_html.find('ul', class_='explore_filters facets_nav selected_facets')
@@ -94,38 +97,38 @@ class DiscogsSearchScraper(BaseScraper):
                 try:
                     for li in ul.find_all('li'):
                         facet_name = li.find('span', class_='facet_name').text
-                        print('check this out')
+
                         #print(facet_name)
-                        facet_name_spaces_replace = facet_name.replace(' ', '+')
-                        print(facet_name_spaces_replace)
-                        print(applied_filters)
+                        #facet_name_spaces_replace = facet_name.replace(' ', '+')
+                        #print(facet_name_spaces_replace)
+                        #print(applied_filters)
                         # check if the facet_name_spaces_replace is in any of the string values in applied_filters
-                        if any(facet_name_spaces_replace in x for x in applied_filters):
-                            print("yes")
+                       # if any(facet_name_spaces_replace in x for x in applied_filters):
+                       #     print("yes")
 
                         #if facet_name_spaces_replace in [x for x in applied_filters].any() is True
 
                         href = li.find('a')['href']
                         search_term = href.split('?')[-1]
-                        print(search_term)
+                        #print(search_term)
                         __search_term = search_term.split('=')
                         ____search_term = [term.split('&') for term in __search_term]
-                        print(____search_term)
                         # code to flatten list ____search_term into a single 1 dimensional list
                         new_applied_filters_list = [item for sublist in ____search_term for item in sublist]
+                        # Reverse the list and assign to a new variable
                         # if new_applied_filters_list equal or larger than 4
                         if len(new_applied_filters_list) >= 2:
-                            # check if every second item in the list is in applied_filters
-                            if all(new_applied_filters_list[i] in applied_filters for i in range(1, len(new_applied_filters_list), 2)):
-                                print("yes")
+                            #print(new_applied_filters_list)
+                            #slice last two indexes from new_applied_filters_list out of the list
+                            new_applied_filters_list = new_applied_filters_list[:-2]
+                            new_applied_filters_list = new_applied_filters_list[::-1]
 
-                        print(new_applied_filters_list)
 
 
                         aside_navbar_content[header_name][facet_name] = href
                 except AttributeError:
                     pass
-        return aside_navbar_content, applied_filters
+        return aside_navbar_content, applied_filters, new_applied_filters_list
 
     def get_center_releases_content(self, SoupObj):
         a_tags = SoupObj.find_all('a', class_='thumbnail_link')
@@ -153,6 +156,7 @@ class DiscogsSearchScraper(BaseScraper):
                     }
                     center_releases_content.append(release_info)
         return center_releases_content
+
 
     def getDiscogsUrl(self,href):
         if href.beginswith('/search'):
@@ -249,12 +253,23 @@ class DiscogsSearchScraper(BaseScraper):
             clean_applied_filters.append(filt)
             #i need the code to get the search term from the applied filter
 
-
         return clean_applied_filters
 
+    def addAppliedFilter(self, applied_filter):
+        self.applied_filters.append(applied_filter)
+
+    def remove_applied_filter(self, applied_filters, remove_value):
+        print("here")
+        for i in range(1, len(applied_filters)):
+            #print(applied_filters[i], i)
+            if applied_filters[i] == remove_value:
+                # Remove the element and the one before it
+                del applied_filters[i - 1:i + 1]
+                break  # Break after removing the elements to avoid index errors
+        return applied_filters
 
     def updateAppliedFilters(self, applied_filters):
-        a_f_url_term = self.search_options_dict
+        #print(f'update appledfilters {applied_filters}')
         if type(applied_filters) is list:
             clean_applied_filters = self.clean_applied_filters(applied_filters)
             self.applied_filters = clean_applied_filters
@@ -263,6 +278,45 @@ class DiscogsSearchScraper(BaseScraper):
             clean_applied_filters = self.clean_applied_filters(unclean_applied_filters)
             self.applied_filters = clean_applied_filters
 
+    def getUrlFromAppliedFilters(self, applied_filters):
+        full_terms_list = []
+        # Iterate through the list two items at a time
+        for i in range(0, len(applied_filters), 2):
+            # Access the current item and the next one
+            label_type_s_term = applied_filters[i]
+            label_info_s_term = applied_filters[i + 1] if i + 1 < len(applied_filters) else None
+            full_term = label_info_s_term+"="+label_type_s_term
+            full_terms_list.append(full_term)
+            # Now you can process the pair of items
+        flattened_string = ''.join([f"?{full_terms_list[0]}"] + [f"&{item}" for item in full_terms_list[1:]] if full_terms_list else [])
+        url = self.base_discogs_search_url+flattened_string
+        self.getAppliedFiltersFromUrl(url)
+        return url
+
+    def flattenAppliedFiltersList(self, applied_filters):
+        flattened_string = ''.join(
+            [f"?{applied_filters[0]}"] + [f"&{item}" for item in applied_filters[1:]] if applied_filters else [])
+        return flattened_string
+
+    def getAppliedFiltersFromUrl(self, url):
+        if "search" not in url:
+            raise ValueError
+        else:
+            if 'page' in url:
+                print('need to remove pages from url')
+                print(url)
+                # code to use regex to remove page= and any number after it
+                url = re.sub(r'page=\d+', '', url)
+                print(url)
+            search_term = url.split('search')[-1]
+            search_term = search_term.strip('?')
+            search_term = search_term.strip('&')
+            search_terms = search_term.split('&')
+
+            # Split each item at '=' and extend them into a flat list
+            applied_filters = [item for term in search_terms for item in term.split('=')]
+            # return flat_list
+            return applied_filters
 
 
 class DiscogsSearch(DiscogsSearchScraper):
@@ -276,7 +330,7 @@ class DiscogsSearch(DiscogsSearchScraper):
         self.start_url = start_url
         self.current_page = start_url
         self.next_page = self.get_next_search_page_url(start_url)
-        aside_navbar_content, center_releases_content, applied_filters = self.get_search_page_content(start_url)
+        aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list = self.get_search_page_content(start_url)
         #self.applied_filters = applied_filters
         #super(DiscogsSearch, self).get_search_page_content(start_url)
         self.updateSearchOptions(aside_navbar_content=aside_navbar_content)
@@ -311,7 +365,7 @@ class DiscogsSearch(DiscogsSearchScraper):
         self.current_page = self.get_current_page_from_url(self.current_url)
         self.next_page = self.get_next_search_page_url(self.current_url)
 
-    def saveDataFrameToCSV(self, save_as_file_name = None):
+    def saveDataFrameToCSV(self, save_as_file_name = 'default_file_name'):
         self.data_handler.save_dataframe(save_as_file_name)
     """
         def remove_discogs_search_term(self, remove_search_term):
@@ -321,7 +375,7 @@ class DiscogsSearch(DiscogsSearchScraper):
 
 
     def get_search_options(self):
-        #aside_navbar_content, center_releases_content = base.get_search_page_content(base_url)
+        #aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list = base.get_search_page_content(base_url)
         #print(self.search_options_dict)
         print("here are the options you can search")
         for k, nested_dict in self.search_options_dict.items():
@@ -341,6 +395,7 @@ class DiscogsSearch(DiscogsSearchScraper):
                 start_number = ___start_number
             end_number = end_number + 1
             #
+            pages_term = ['pages', str(start_number), str(end_number)]
             return [self.create_url_from_page_number(new_discogs_search_url, str(page_num)) for page_num in range(start_number, end_number)]
 
     def user_interaction(self):
@@ -348,11 +403,12 @@ class DiscogsSearch(DiscogsSearchScraper):
         switch = {
             '1': self.user_interaction_add_filters,
             '2': self.data_handler.display_dataframe,
-            '3': self.data_handler.fill_in_blanks,
+            '3': self.user_interaction_fill_in_blanks,
             '4': self.updateDataFrame,
             '5': self.saveDataFrameToCSV,
             '6': self.user_interaction_select_pages,
-            '7': self.user_interaction_view_applied_filters
+            '7': self.user_interaction_view_applied_filters,
+            '8': self.user_interaction_remove_filters
         }
         while u_i != "Q":
             print("1: Apply Filters Page \n"
@@ -360,8 +416,9 @@ class DiscogsSearch(DiscogsSearchScraper):
                   "3: Fill in DataFrame \n"
                   "4: Update DataFrame \n"
                   "5: Save DataFrame to CSV \n"
-                  "6: Select Mutiple Pages \n"
-                  "7: View Applied Filters \n")
+                  "6: Scrape Pages \n"
+                  "7: View Applied Filters \n"
+                  "8: Remove Applied Filters \n")
             u_i = input("Enter Q to Quit, or any other key to continue: ")
 
 
@@ -382,40 +439,92 @@ class DiscogsSearch(DiscogsSearchScraper):
         if len(self.search_dict_get_label_type_keys()) == 0:
             return
         enter_key1 = int(input(""))-1 #-1 to get index number
-        #print(self.search_options_dict[enter_key1])
         label_type, values = list(self.search_dict_get_label_type_items())[enter_key1]
-        #print(f"{items} did items print")
-
-        #label_type, values = items[enter_key1]
         print([f"{i}: {label_data}" for i, label_data in reversed(list(enumerate(self.search_dict_get_label_url_keys(label_type), 1)))])
         enter_key2 = int(input(""))-1
         new_search_term_1 = self.search_dict_get_search_term(label_type, enter_key2)
         new_discogs_search_url = self.base_discogs_url+new_search_term_1
         self.fetchSearchPageContent(new_discogs_search_url)
 
-    def user_interaction_select_pages(self):
+    def user_interaction_remove_filters(self):
+        # Display applied filters starting from the second item (index 1)
+        if len(self.applied_filters) >= 2:
+            # Using dictionary comprehension to display every second item starting from index 1
+            displayed_filters = {i // 2 + 1: self.applied_filters[i] for i in range(0, len(self.applied_filters), 2)}
+            print(f"Applied filters: {displayed_filters}")
+        else:
+            print(f"Applied filters: {self.applied_filters}")
+
+        if len(self.search_dict_get_label_type_keys()) == 0:
+            return
+
+        remove_index = int(input("Enter index to remove: ")) - 1
+        # Adjust the remove_index to point to the correct element in applied_filters
+        adjusted_remove_index = remove_index * 2 + 1
+
+        # Check if adjusted_remove_index is valid
+        if 0 <= adjusted_remove_index < len(self.applied_filters):
+            # Remove the element and its preceding element
+            self.applied_filters = self.remove_applied_filter(self.applied_filters, adjusted_remove_index)
+            url = self.getUrlFromAppliedFilters(self.applied_filters)
+            self.fetchSearchPageContent(url)
+        else:
+            print("Invalid index")
+
+    # Helper function to remove element and its previous element
+    def remove_applied_filter(self, filters, index):
+        if index > 0 and index < len(filters):
+            del filters[index - 1:index + 1]
+        return filters
+
+    def test_function(self, max_rows):
+        enter_key1 = '4'
+        print(f"page range is {enter_key1}")
+        search_pages = self.get_page_range(self.current_url, enter_key1)
+        TEST_URL = 'https://www.discogs.com/search/?genre_exact=Electronic&style_exact=Techno&style_exact=Ambient&page=5'
+        self.fetchSearchPageContent(TEST_URL, update_applied_filters=True)
+        self.updateDataFrame()
+        #max_rows = 3
+        print(" max number of rows is 5")
+        self.data_handler.update_release_data(max_rows_to_update=max_rows)
+        self.data_handler.display_dataframe()
+        self.saveDataFrameToCSV(save_as_file_name="test_function_save_file_name.csv")
+
+    def user_interaction_select_pages(self, update_applied_filters=False):
         #self.current_url
         enter_key3 = input("Enter a page number, or range (number seperated by a space)")
         search_pages = self.get_page_range(self.current_url, enter_key3)
         for search_page_url in search_pages:
             time.sleep(0.5)
             print(f"Navigating to : \n {search_page_url}")
-            self.fetchSearchPageContent(search_page_url)
+            self.fetchSearchPageContent(search_page_url, update_applied_filters)
             self.updateDataFrame()
+       # self.addAppliedFilter(pages_filter_term)
 
     def user_interaction_view_applied_filters(self):
         print(f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]}")
 
-    def fetchSearchPageContent(self, new_discogs_search_url):
-        aside_navbar_content, center_releases_content, applied_filters = self.get_search_page_content(new_discogs_search_url)
+    def user_interaction_fill_in_blanks(self):
+        max_rows  = int(input("Enter the number of rows to fill in: "))
+        self.data_handler.update_release_data(max_rows_to_update=max_rows)
+
+
+
+
+    def fetchSearchPageContent(self, new_discogs_search_url, update_applied_filters = True):
+        aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list = self.get_search_page_content(new_discogs_search_url)
         self.updateSearchOptions(aside_navbar_content)
-        self.updateAppliedFilters(applied_filters)
+        #print(f"now updating applied filters with this {new_applied_filters_list}")
+        #self.updateAppliedFilters(new_applied_filters_list)
+        if update_applied_filters is True:
+            self.updateAppliedFilters(new_applied_filters_list)
+        self.getUrlFromAppliedFilters(self.applied_filters)
         self.updateCenterReleasesContent(center_releases_content)
         self.updateCurrentUrl(new_discogs_search_url)
         self.updateCurrentPageAndNextPage()
-        print(self.get_number_of_search_pages(new_discogs_search_url))
+        #print(self.get_number_of_search_pages(new_discogs_search_url))
         print(self.get_current_page_from_url(new_discogs_search_url))
-        print(self.get_next_search_page_url(new_discogs_search_url))
+        #print(self.get_next_search_page_url(new_discogs_search_url))
         #self.data_handler.update_dataframe(center_releases_content)
         #self.update_center_releases_content(center_releases_content)
 
@@ -423,29 +532,8 @@ class DiscogsSearch(DiscogsSearchScraper):
         new_discogs_search_url = self.current_url.strip(remove_search_term)
         return new_discogs_search_url
 
-"""
-        #Check if discogs url is vanilla or already contains a term
-        if new_search_term in self.current_url:
-            raise ValueError
 
-        if self.current_url.endswith("search"):
-            new_discogs_search_url = self.current_url +"?"+new_search_term
-        else:
-            if new_search_term in self.current_url:
-                new_discogs_search_url = self.current_url
-            else:
-                new_discogs_search_url = self.current_url + "&" + new_search_term
-        print(f"this is new url {new_discogs_search_url}")
-
-       # Check if the combination of artist and title is already in the DataFrame
-        if not ((self.df["Release Artists"] == artist) & (self.df["Release Titles"] == title)).any():
-            new_row = pd.DataFrame([{"Release Artists": artist, "Release Titles": title, "Discogs Url": href}])
-            self.df = pd.concat([self.df, new_row], ignore_index=True)
-            self.df.to_csv(path_or_buf="hello.csv")
-"""
-
-
-class DiscogsReleaseScraper():
+class DiscogsReleaseScraper(BaseScraper):
 
     def __init__(self):
         self.Release_Dataframe = DiscogsReleaseScraper.create_Release_Dataframe()
@@ -462,22 +550,40 @@ class DiscogsReleaseScraper():
         SoupObj = Base_Scraper.createSoupObjFromUrl(base_url)
         release_table_content = self.get_release_table_content(SoupObj)
         release_tracklist_content = self.get_release_tracklist_content(SoupObj)
-        # release_video_links_content = self.parse_video_links(youtube_API_Key)
+        release_video_links_content = self.get_release_video_links_content(SoupObj)
 
     def get_release_tracklist_content(self, SoupObj):
         release_tracklist_content = []
-        #SoupScraper.get_page_content(base_url)
+        # Try to get the artist from the top of the page
+        artist_link = SoupObj.find('a', class_='link_1ctor link_15cpV')
+        print(artist_link)
+        print('what was that!')
+        if artist_link is None:
+            artist_link = 'Various'
+        print(f"is this working {artist_link.text}")
+        primary_artist = artist_link.text
+
         table = SoupObj.find('table', class_="tracklist_3QGRS")
-        tr = table.find_all('tr')
+
+        if not table:
+            return release_tracklist_content  # Return empty list if table is not found
+
         for tr in table.find_all('tr'):
-            #label = tr.find('th').text
-            artist_line = tr.find('td', class_='artist_3zAQD')
-            artist = artist_line.find('a', class_='link_1ctor link_15cpV').text
-            # Need to clean the artist string
-            artist = re.sub(r'\(\d+\)', '', artist)
+            print(f"heres the artist line")
+            artist_line = tr.find('td', class_='artist_3zAQD').text
+            print(artist_line)
+            if artist_line:
+                artist = artist_line.text.strip()
+            else:
+                # Use the primary artist if specific artist info is not found in the track row
+                artist = primary_artist
+
+            # Extract track name
             track_name_line = tr.find('td', class_='trackTitle_CTKp4')
-            track_name = track_name_line.find('span', class_='trackTitle_CTKp4').text
+            track_name = track_name_line.text.strip() if track_name_line else "Unknown Track"
+
             release_tracklist_content.append([artist, track_name])
+
         return release_tracklist_content
 
     def get_release_table_content(self, SoupObj):
@@ -485,22 +591,33 @@ class DiscogsReleaseScraper():
         table = SoupObj.find('table', class_="table_1fWaB")
         #tr = table.find_all('tr')
         for tr in table.find_all('tr'):
-            info_label = tr.find('th').text
+            info_label = tr.find('th').text.rstrip(":")
+            print(f"check this {info_label}")
             info = tr.find('td').text
+            print(f"check this {info}")
             release_table_content[info_label] = info
+            print(info_label, info)
+            print("whats this")
         return release_table_content
 
-    def get_release_video_links_content(self,SoupObj, youtube_api_key):
+    def get_release_video_links_content(self,SoupObj):
         video_player = SoupObj.find('ul', class_='videos_1xVCN')
+        video_player_list_items = video_player.find_all('li')
+        number_videos_found = len(video_player.find_all('li'))
+        print(f"this is what{number_videos_found}")
         release_video_links_content = []
-        YouScrape = YoutubeAPI(youtube_api_key)
-        for video in video_player.find_all('li'):
+        YouScrape = YoutubeAPI()
+        for i, video in enumerate(video_player_list_items):
             time.sleep(1)
+            print(video_player_list_items[i])
+            #print(f"check this viedeo{video}")
+
             video_title = video.find('div', class_='title_26yzZ').text
-            # print(video_title)
+
+            #print(f"printing info now: {video_title}")
             video_title, video_url, video_id = YouScrape.search_youtube_video(video_title)
             # print(video_url)
-            release_video_links_content.append([video_title, video_url, video_id])
+            release_video_links_content.append([video_title, video_url])
         return release_video_links_content
 
 
@@ -510,19 +627,20 @@ class YoutubeScraper():
 
 class YoutubeAPI(YoutubeScraper):
     # my key is : AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg
-    def __init__(self, api_key):
+    def __init__(self, api_key='AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg'):
         super().__init__()
         self.api_key = api_key
         self.youtube = youtube_api.build('youtube', 'v3', developerKey=self.api_key)
 
     def search_youtube_video(self, search_term):
-        request = self.youtube.search().list(
-            q=search_term,
-            part='snippet',
-            maxResults=1,
-            type='video'
-        )
-        response = request.execute()
+        with requests.Session() as session:
+            request = self.youtube.search().list(
+                q=search_term,
+                part='snippet',
+                maxResults=1,
+                type='video'
+            )
+            response = request.execute()
 
         if response['items']:
             first_result = response['items'][0]
@@ -592,17 +710,19 @@ class YoutubeVideoCommentsBrowser(YoutubeAPI):
                 results[key] = comment_data
         return results
 
+
 class DataHandler:
     def __init__(self, df = None, csv_file = None):
         if csv_file is None:
             if df is None:
                 self.df = pd.DataFrame(columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
                                                 "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_URLS",
-                                                "Discogs_Formats", "Discogs_YouTube_Videos"])
+                                                "Discogs_Formats", "Discogs_Tracklist", "Discogs_YouTube_Videos"])
             else:
                 self.df = df
         else:
             self.df = DataHandler.loadfromCSV(csv_file=csv_file)
+
 
     def update_dataframe(self, new_data):
         if isinstance(new_data, dict):
@@ -618,23 +738,77 @@ class DataHandler:
         self.df = pd.concat([self.df, new_df], ignore_index=True).drop_duplicates(
             subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
                                                 "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_URLS",
-                                                "Discogs_Formats",  "Discogs_YouTube_Videos"])
-    def fill_in_blanks(self):
-        for x in self.df.Discogs_URLS:
-            pass
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
 
     def display_dataframe(self):
         print(self.df)
 
     def save_dataframe(self, save_as_file_name):
         if save_as_file_name is None:
-            save_as_file_name = "1DATAFRAME_CSV_GENERIC_NAME"
+            save_as_file_name = "1_-2test"
         self.df.to_csv(path_or_buf=save_as_file_name)
 
     def loadfromCSV(csv_file):
         df = pd.read_csv(csv_file)
         return df
 
+    def update_release_table_content(self, index, release_table_content):
+        # Define the mapping for table content
+        label_to_column_mapping = {
+            'Label': 'Discogs_Labels',
+            'Format': 'Discogs_Formats',
+            'Country': 'Discogs_Countries',
+            'Released': 'Discogs_Years',
+            'Genre': 'Discogs_Tags',
+            'Style': 'Discogs_Tags',
+            # Add more mappings as needed
+        }
+
+        row_updates = {}
+        for info_label, info in release_table_content.items():
+            column_name = label_to_column_mapping.get(info_label)
+            if column_name:
+                row_updates[column_name] = info
+
+        for key, value in row_updates.items():
+            self.df.at[index, key] = value
+
+    def update_release_tracklist_content(self, index, release_tracklist_content):
+        print(release_tracklist_content)
+        # Assign the list directly to the DataFrame
+        self.df.at[index, 'Discogs_Tracklist'] = release_tracklist_content
+
+    def update_release_video_links_content(self, index, release_video_links_content):
+        # Convert video links list to a format suitable for DataFrame
+        # For example, a string with each link separated by a delimiter
+        #video_links_str = '; '.join([f"{title} ({url})" for title, url, _ in release_video_links_content])
+        self.df.at[index, 'Discogs_YouTube_Videos'] = release_video_links_content
+
+    def update_release_data(self, max_rows_to_update=None):
+        scraper = DiscogsReleaseScraper()
+
+        rows_processed = 0
+        for index, row in self.df.iterrows():
+            if max_rows_to_update is not None and rows_processed >= max_rows_to_update:
+                break
+
+            discogs_url = row['Discogs_URLS']
+            SoupObj = scraper.createSoupObjFromUrl(discogs_url)
+
+            # Update table content
+            release_table_content = scraper.get_release_table_content(SoupObj)
+            self.update_release_table_content(index, release_table_content)
+
+            # Update tracklist content
+            release_tracklist_content = scraper.get_release_tracklist_content(SoupObj)
+            self.update_release_tracklist_content(index, release_tracklist_content)
+
+            # Update video links content
+            release_video_links_content = scraper.get_release_video_links_content(SoupObj)
+            self.update_release_video_links_content(index, release_video_links_content)
+
+            rows_processed += 1
+            time.sleep(random.gauss(mu=3, sigma=0.5))
 
 """
 
