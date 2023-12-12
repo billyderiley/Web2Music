@@ -1,8 +1,10 @@
 import time
 
+import threading
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+pd.set_option('display.max_columns', None)
 import re
 import googleapiclient.discovery as youtube_api
 import random
@@ -33,7 +35,7 @@ class BaseScraper:
 
     def get_Soup_from_url(self, base_url):
         try:
-            print(f"what is this {base_url}")
+            #print(f"what is this {base_url}")
             SoupObj = self.Soupy_Url_Dict[base_url]
         except KeyError:
             SoupObj = self.createSoupObjFromUrl(base_url)
@@ -42,18 +44,34 @@ class BaseScraper:
 
 
 class DiscogsSearchScraper(BaseScraper):
-    def __init__(self):
+    def __init__(self, start_url, data_handler = None):
         super().__init__()
         self.search_options_dict = {}
         self.base_discogs_url = "https://discogs.com"
         self.base_discogs_search_url = "https://discogs.com/search"
         self.DISCOGS_INTERNAL_MAX_SEARCH_PAGES = 200
+        self.aside_navbar_content = None
+        self.center_releases_content = None
+        self.applied_filters = []
+        self.base_url = start_url
+        self.current_url = start_url
+        self.start_url = start_url
+        self.current_page = start_url
+        self.next_page = self.get_next_search_page_url(start_url)
+        if data_handler is None:
+            self.data_handler = DataHandler()
+        else:
+            self.data_handler = data_handler
 
-    def get_search_page_content(self, base_url):
+    def get_current_search_page_content(self):
+        base_url = self.current_url
         #Base_Scraper = BaseScraper()
         SoupObj = self.get_Soup_from_url(base_url)
         aside_navbar_content, applied_filters, new_applied_filters_list = self.get_aside_navbar_content(SoupObj)
+        #self.updateAppliedFilters(self.getAppliedFiltersFromUrl(self.current_url))
         center_releases_content = self.get_center_releases_content(SoupObj)
+        print("what is this")
+        print(applied_filters)
         return aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list
 
 
@@ -146,13 +164,14 @@ class DiscogsSearchScraper(BaseScraper):
                 # Need to clean the artist string
                 artist = re.sub(r'\(\d+\)', '', artist)
                 title = aria_label_parts[1].strip()
-
+                print(f"whats this {self.applied_filters}")
                 # Check if the title already exists in the releases
                 if not any(release['Discogs_Titles'] == title for release in center_releases_content):
                     release_info = {
                         "Discogs_Artists": artist,
                         "Discogs_Titles": title,
-                        "Discogs_URLS": self.base_discogs_url+href
+                        "Discogs_URLS": self.base_discogs_url+href,
+                        "Discogs_Search_Terms": self.applied_filters
                     }
                     center_releases_content.append(release_info)
         return center_releases_content
@@ -259,7 +278,7 @@ class DiscogsSearchScraper(BaseScraper):
         self.applied_filters.append(applied_filter)
 
     def remove_applied_filter(self, applied_filters, remove_value):
-        print("here")
+        #print("here")
         for i in range(1, len(applied_filters)):
             #print(applied_filters[i], i)
             if applied_filters[i] == remove_value:
@@ -290,7 +309,7 @@ class DiscogsSearchScraper(BaseScraper):
             # Now you can process the pair of items
         flattened_string = ''.join([f"?{full_terms_list[0]}"] + [f"&{item}" for item in full_terms_list[1:]] if full_terms_list else [])
         url = self.base_discogs_search_url+flattened_string
-        self.getAppliedFiltersFromUrl(url)
+        #self.getAppliedFiltersFromUrl(url)
         return url
 
     def flattenAppliedFiltersList(self, applied_filters):
@@ -299,84 +318,32 @@ class DiscogsSearchScraper(BaseScraper):
         return flattened_string
 
     def getAppliedFiltersFromUrl(self, url):
+        print(url)
         if "search" not in url:
             raise ValueError
         else:
             if 'page' in url:
-                print('need to remove pages from url')
-                print(url)
+                #print('need to remove pages from url')
+                #print(url)
                 # code to use regex to remove page= and any number after it
                 url = re.sub(r'page=\d+', '', url)
-                print(url)
-            search_term = url.split('search')[-1]
-            search_term = search_term.strip('?')
-            search_term = search_term.strip('&')
-            search_terms = search_term.split('&')
-
-            # Split each item at '=' and extend them into a flat list
-            applied_filters = [item for term in search_terms for item in term.split('=')]
-            # return flat_list
+                #print(url)
+            print("IYA")
+            if url.endswith('/'):
+                applied_filters = []
+            else:
+                search_term = url.split('/?')[-1]
+                print(search_term)
+                search_term = search_term.strip('?')
+                search_term = search_term.strip('&')
+                search_terms = search_term.split('&')
+                # Split each item at '=' and extend them into a flat list
+                applied_filters = [item for term in search_terms for item in term.split('=')]
+                # return flat_list
             return applied_filters
 
 
-class DiscogsSearch(DiscogsSearchScraper):
-    def __init__(self, start_url, data_handler = None):
-        super().__init__()
-        self.aside_navbar_content = None
-        self.center_releases_content = None
-        self.applied_filters = []
-        self.base_url = start_url
-        self.current_url = start_url
-        self.start_url = start_url
-        self.current_page = start_url
-        self.next_page = self.get_next_search_page_url(start_url)
-        aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list = self.get_search_page_content(start_url)
-        #self.applied_filters = applied_filters
-        #super(DiscogsSearch, self).get_search_page_content(start_url)
-        self.updateSearchOptions(aside_navbar_content=aside_navbar_content)
-        self.updateCenterReleasesContent(center_releases_content=center_releases_content)
-        self.updateAppliedFilters(applied_filters=applied_filters)
-        if data_handler is None:
-            self.data_handler = DataHandler()
-        else:
-            self.data_handler = data_handler
-        #self.update_center_releases_content(center_releases_content)
-        #self.search_page_user_interaction()
-
-
-    def updateCurrentUrl(self, url):
-        self.current_url = url
-
-    def updateCenterReleasesContent(self,center_releases_content):
-        self.center_releases_content = center_releases_content
-
-
-    def updateSearchOptions(self, aside_navbar_content):
-        self.search_options_dict = aside_navbar_content
-
-    def updateDataFrame(self):
-        self.data_handler.update_dataframe(self.center_releases_content)
-
-    #def update_center_releases_content(self, center_releases_content):
-    #    self.center_releases_content = center_releases_content
-
-
-    def updateCurrentPageAndNextPage(self):
-        self.current_page = self.get_current_page_from_url(self.current_url)
-        self.next_page = self.get_next_search_page_url(self.current_url)
-
-    def saveDataFrameToCSV(self, save_as_file_name = 'default_file_name'):
-        self.data_handler.save_dataframe(save_as_file_name)
-    """
-        def remove_discogs_search_term(self, remove_search_term):
-        new_discogs_search_url = self.current_url.strip(remove_search_term)
-        return new_discogs_search_url
-    """
-
-
     def get_search_options(self):
-        #aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list = base.get_search_page_content(base_url)
-        #print(self.search_options_dict)
         print("here are the options you can search")
         for k, nested_dict in self.search_options_dict.items():
             print(f"Key = {k}")
@@ -398,6 +365,68 @@ class DiscogsSearch(DiscogsSearchScraper):
             pages_term = ['pages', str(start_number), str(end_number)]
             return [self.create_url_from_page_number(new_discogs_search_url, str(page_num)) for page_num in range(start_number, end_number)]
 
+
+
+
+class DiscogsSearch(DiscogsSearchScraper):
+    def __init__(self, start_url, data_handler = None):
+        super().__init__(start_url, data_handler)
+        self.start_up()
+
+        #self.applied_filters = applied_filters
+        #super(DiscogsSearch, self).get_search_page_content(start_url)
+
+        #self.update_center_releases_content(center_releases_content)
+        #self.search_page_user_interaction()
+
+    def start_up(self):
+        self.current_url = self.start_url
+        self.updateAppliedFilters(applied_filters=self.getAppliedFiltersFromUrl(self.current_url))
+        self.fetchSearchPageContent()
+
+        self.aside_navbar_content, self.center_releases_content, __applied_filters, __new_applied_filters_list \
+            = self.get_current_search_page_content()
+        self.updateSearchOptions()
+
+    def navigatetoSearchUrl(self, url):
+        self.current_url = url
+        self.updateAppliedFilters(applied_filters=self.getAppliedFiltersFromUrl(self.current_url))
+        #self.updateCurrentPageAndNextPage()
+        self.fetchSearchPageContent()
+
+    def fetchSearchPageContent(self, update_applied_filters = True):
+        #self.updateCurrentUrl(new_discogs_search_url)
+        #self.updateAppliedFilters(self.getAppliedFiltersFromUrl(new_discogs_search_url))
+        self.aside_navbar_content, self.center_releases_content, __applied_filters, __new_applied_filters_list = self.get_current_search_page_content()
+        #self.updateSearchOptions()
+        #self.updateCenterReleasesContent(center_releases_content)
+        #return fetchSearchPageContent
+
+
+
+    def updateSearchOptions(self):
+        self.search_options_dict = self.aside_navbar_content
+
+    def updateDataFrame(self):
+        self.data_handler.update_dataframe(self.center_releases_content)
+
+    #def update_center_releases_content(self, center_releases_content):
+    #    self.center_releases_content = center_releases_content
+
+
+    def updateCurrentPageAndNextPage(self):
+        self.current_page = self.get_current_page_from_url(self.current_url)
+        self.next_page = self.get_next_search_page_url(self.current_url)
+
+    def saveDataFrameToCSV(self, save_as_file_name = 'default_file_name'):
+        self.data_handler.save_dataframe(save_as_file_name)
+    """
+        def remove_discogs_search_term(self, remove_search_term):
+        new_discogs_search_url = self.current_url.strip(remove_search_term)
+        return new_discogs_search_url
+    """
+
+
     def user_interaction(self):
         u_i = ''
         switch = {
@@ -405,7 +434,7 @@ class DiscogsSearch(DiscogsSearchScraper):
             '2': self.data_handler.display_dataframe,
             '3': self.user_interaction_fill_in_blanks,
             '4': self.updateDataFrame,
-            '5': self.saveDataFrameToCSV,
+            '5': self.user_interaction_save_dataframe,
             '6': self.user_interaction_select_pages,
             '7': self.user_interaction_view_applied_filters,
             '8': self.user_interaction_remove_filters
@@ -444,7 +473,7 @@ class DiscogsSearch(DiscogsSearchScraper):
         enter_key2 = int(input(""))-1
         new_search_term_1 = self.search_dict_get_search_term(label_type, enter_key2)
         new_discogs_search_url = self.base_discogs_url+new_search_term_1
-        self.fetchSearchPageContent(new_discogs_search_url)
+        self.navigatetoSearchUrl(new_discogs_search_url)
 
     def user_interaction_remove_filters(self):
         # Display applied filters starting from the second item (index 1)
@@ -477,7 +506,7 @@ class DiscogsSearch(DiscogsSearchScraper):
             del filters[index - 1:index + 1]
         return filters
 
-    def test_function(self, max_rows):
+    def test_function(self, max_rows_to_update = None ):
         enter_key1 = '4'
         print(f"page range is {enter_key1}")
         search_pages = self.get_page_range(self.current_url, enter_key1)
@@ -485,10 +514,10 @@ class DiscogsSearch(DiscogsSearchScraper):
         self.fetchSearchPageContent(TEST_URL, update_applied_filters=True)
         self.updateDataFrame()
         #max_rows = 3
-        print(" max number of rows is 5")
-        self.data_handler.update_release_data(max_rows_to_update=max_rows)
-        self.data_handler.display_dataframe()
-        self.saveDataFrameToCSV(save_as_file_name="test_function_save_file_name.csv")
+        #print(" max number of rows is 5")
+        self.data_handler.update_release_data(max_rows_to_update=max_rows_to_update)
+        #self.data_handler.display_dataframe()
+        #self.saveDataFrameToCSV(save_as_file_name="saved_data.csv")
 
     def user_interaction_select_pages(self, update_applied_filters=False):
         #self.current_url
@@ -506,24 +535,24 @@ class DiscogsSearch(DiscogsSearchScraper):
 
     def user_interaction_fill_in_blanks(self):
         max_rows  = int(input("Enter the number of rows to fill in: "))
+        if max_rows == '':
+            max_rows = None
         self.data_handler.update_release_data(max_rows_to_update=max_rows)
 
+    def user_interaction_save_dataframe(self):
+        save_name = input("Enter the name of the file to save as: ")
+        self.data_handler.save_dataframe(save_name)
 
 
 
-    def fetchSearchPageContent(self, new_discogs_search_url, update_applied_filters = True):
-        aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list = self.get_search_page_content(new_discogs_search_url)
-        self.updateSearchOptions(aside_navbar_content)
+        #self.updateCurrentPageAndNextPage()
         #print(f"now updating applied filters with this {new_applied_filters_list}")
         #self.updateAppliedFilters(new_applied_filters_list)
-        if update_applied_filters is True:
-            self.updateAppliedFilters(new_applied_filters_list)
-        self.getUrlFromAppliedFilters(self.applied_filters)
-        self.updateCenterReleasesContent(center_releases_content)
-        self.updateCurrentUrl(new_discogs_search_url)
-        self.updateCurrentPageAndNextPage()
+        #if update_applied_filters is True:
+            #self.updateAppliedFilters(new_applied_filters_list)
+        #self.getUrlFromAppliedFilters(self.applied_filters)
         #print(self.get_number_of_search_pages(new_discogs_search_url))
-        print(self.get_current_page_from_url(new_discogs_search_url))
+        #print(self.get_current_page_from_url(new_discogs_search_url))
         #print(self.get_next_search_page_url(new_discogs_search_url))
         #self.data_handler.update_dataframe(center_releases_content)
         #self.update_center_releases_content(center_releases_content)
@@ -556,11 +585,11 @@ class DiscogsReleaseScraper(BaseScraper):
         release_tracklist_content = []
         # Try to get the artist from the top of the page
         artist_link = SoupObj.find('a', class_='link_1ctor link_15cpV')
-        print(artist_link)
-        print('what was that!')
+        #print(artist_link)
+        #print('what was that!')
         if artist_link is None:
             artist_link = 'Various'
-        print(f"is this working {artist_link.text}")
+        #print(f"is this working {artist_link.text}")
         primary_artist = artist_link.text
 
         table = SoupObj.find('table', class_="tracklist_3QGRS")
@@ -569,11 +598,11 @@ class DiscogsReleaseScraper(BaseScraper):
             return release_tracklist_content  # Return empty list if table is not found
 
         for tr in table.find_all('tr'):
-            print(f"heres the artist line")
+            #print(f"heres the artist line")
             artist_line = tr.find('td', class_='artist_3zAQD').text
-            print(artist_line)
+            #print(artist_line)
             if artist_line:
-                artist = artist_line.text.strip()
+                artist = artist_line.strip()
             else:
                 # Use the primary artist if specific artist info is not found in the track row
                 artist = primary_artist
@@ -592,35 +621,38 @@ class DiscogsReleaseScraper(BaseScraper):
         #tr = table.find_all('tr')
         for tr in table.find_all('tr'):
             info_label = tr.find('th').text.rstrip(":")
-            print(f"check this {info_label}")
+            #print(f"check this {info_label}")
             info = tr.find('td').text
-            print(f"check this {info}")
+            #print(f"check this {info}")
             release_table_content[info_label] = info
-            print(info_label, info)
-            print("whats this")
+            #print(info_label, info)
+            #print("whats this")
         return release_table_content
 
-    def get_release_video_links_content(self,SoupObj):
+    def get_release_video_links_content(self, SoupObj):
         video_player = SoupObj.find('ul', class_='videos_1xVCN')
         video_player_list_items = video_player.find_all('li')
-        number_videos_found = len(video_player.find_all('li'))
-        print(f"this is what{number_videos_found}")
         release_video_links_content = []
-        YouScrape = YoutubeAPI()
         for i, video in enumerate(video_player_list_items):
-            time.sleep(1)
-            print(video_player_list_items[i])
-            #print(f"check this viedeo{video}")
+            img_tag = video.find('img', class_='thumbnail_f0Yrr')
+            if img_tag and 'src' in img_tag.attrs:
+                img_src = img_tag['src']
+                # Extract the YouTube video ID from the img src
+                youtube_video_id = self.extract_youtube_id(img_src)
+                youtube_video_url = 'https://www.youtube.com/watch?v=' + youtube_video_id
+                release_video_links_content.append(youtube_video_url)
 
-            video_title = video.find('div', class_='title_26yzZ').text
-
-            #print(f"printing info now: {video_title}")
-            video_title, video_url, video_id = YouScrape.search_youtube_video(video_title)
-            # print(video_url)
-            release_video_links_content.append([video_title, video_url])
         return release_video_links_content
 
+    def extract_youtube_id(self, url):
+        # Extract the part of the URL between 'vi/' and '/default.jpg'
+        if 'vi/' in url and '/default.jpg' in url:
+            start = url.find('vi/') + 3
+            end = url.find('/default.jpg', start)
+            return url[start:end]
+        return None  # Return None if the pattern is not found
 
+"""
 class YoutubeScraper():
     def __init__(self):
         pass
@@ -710,19 +742,22 @@ class YoutubeVideoCommentsBrowser(YoutubeAPI):
                 results[key] = comment_data
         return results
 
-
+"""
 class DataHandler:
     def __init__(self, df = None, csv_file = None):
         if csv_file is None:
             if df is None:
-                self.df = pd.DataFrame(columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_URLS",
-                                                "Discogs_Formats", "Discogs_Tracklist", "Discogs_YouTube_Videos"])
+                self.df = self.create_dataframe()
             else:
                 self.df = df
         else:
             self.df = DataHandler.loadfromCSV(csv_file=csv_file)
 
+    def create_dataframe(self):
+        df = pd.DataFrame(columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_URLS",
+                                                "Discogs_Formats", "Discogs_Tracklist", "Discogs_YouTube_Videos"])
+        return df
 
     def update_dataframe(self, new_data):
         if isinstance(new_data, dict):
@@ -746,11 +781,18 @@ class DataHandler:
     def save_dataframe(self, save_as_file_name):
         if save_as_file_name is None:
             save_as_file_name = "1_-2test"
+        else:
+            if save_as_file_name.endswith('.csv'):
+                save_as_file_name = save_as_file_name
+            else:
+                save_as_file_name += '.csv'
         self.df.to_csv(path_or_buf=save_as_file_name)
 
-    def loadfromCSV(csv_file):
-        df = pd.read_csv(csv_file)
-        return df
+    def loadfromCSV(self, csv_file):
+        try:
+           return pd.read_csv(csv_file)
+        except FileNotFoundError:
+            return None
 
     def update_release_table_content(self, index, release_table_content):
         # Define the mapping for table content
@@ -774,21 +816,23 @@ class DataHandler:
             self.df.at[index, key] = value
 
     def update_release_tracklist_content(self, index, release_tracklist_content):
-        print(release_tracklist_content)
-        # Assign the list directly to the DataFrame
-        self.df.at[index, 'Discogs_Tracklist'] = release_tracklist_content
+        # Convert each inner list to a string and then join all strings
+        tracklist_str = ', '.join([' - '.join(item) for item in release_tracklist_content])
+        # Assign the string to the DataFrame
+        self.df.at[index, 'Discogs_Tracklist'] = tracklist_str
 
     def update_release_video_links_content(self, index, release_video_links_content):
-        # Convert video links list to a format suitable for DataFrame
-        # For example, a string with each link separated by a delimiter
-        #video_links_str = '; '.join([f"{title} ({url})" for title, url, _ in release_video_links_content])
-        self.df.at[index, 'Discogs_YouTube_Videos'] = release_video_links_content
+        # Convert video links list to a single string format
+        video_links_str = ', '.join(release_video_links_content)
+        self.df.at[index, 'Discogs_YouTube_Videos'] = video_links_str
 
     def update_release_data(self, max_rows_to_update=None):
         scraper = DiscogsReleaseScraper()
 
         rows_processed = 0
+        print('here')
         for index, row in self.df.iterrows():
+            print('to')
             if max_rows_to_update is not None and rows_processed >= max_rows_to_update:
                 break
 
@@ -809,6 +853,136 @@ class DataHandler:
 
             rows_processed += 1
             time.sleep(random.gauss(mu=3, sigma=0.5))
+
+
+
+class SessionDataManager(DataHandler):
+    def __init__(self, csv_file_path):
+        super().__init__()
+        self.lock = threading.Lock()
+        if csv_file_path == '' or csv_file_path is None:
+            self.csv_file_path = 'default_df_save.csv'
+        else:
+            self.csv_file_path = csv_file_path
+        if self.loadfromCSV(csv_file_path) is not None:
+            self.df = self.loadfromCSV(csv_file_path)
+        else:
+            self.df = self.create_dataframe()
+
+
+    def add_new_data(self, new_data):
+        with self.lock:
+            if isinstance(new_data, dict):
+                new_data = [new_data]  # Convert single dictionary to a list of dictionaries
+            new_df = pd.DataFrame(new_data)
+            if not self.is_duplicate(new_df):
+                self.df = pd.concat([self.df, new_df], ignore_index=True)
+
+    def compare_and_update_data(self, data_handler_df):
+        def get_more_complete_row(row, cols):
+            for col in cols:
+                if pd.isna(row[col + '_df1']) and not pd.isna(row[col + '_df2']):
+                    row[col + '_df1'] = row[col + '_df2']
+                    print(row)
+            return row[[col + '_df1' for col in cols]]
+
+        with self.lock:
+            # Common columns excluding the ones used for merging
+            common_cols = ['Discogs_Labels', 'Discogs_Tags', 'Discogs_Countries', 'Discogs_Years',
+                           'Discogs_Search_Filters', 'Discogs_Formats', 'Discogs_Tracklist', 'Discogs_YouTube_Videos']
+
+            # Merge the two DataFrames on the identifying columns
+            merged_df = pd.merge(self.df, data_handler_df, on=['Discogs_Artists', 'Discogs_Titles', 'Discogs_URLS'],
+                                 how='outer', suffixes=('_df1', '_df2'))
+
+            # Apply the function to get the more complete row for each common column
+            more_complete_rows = merged_df.apply(lambda row: get_more_complete_row(row, common_cols), axis=1)
+
+            # Add the more complete rows to the DataFrame
+            self.add_new_data_sql_style(more_complete_rows)
+
+    def add_new_data_sql_style(self, new_df):
+        with self.lock:
+            # Setting an index, for example, a combination of 'Discogs_Artists', 'Discogs_Titles', 'Discogs_URLS'
+            self.df.set_index(['Discogs_Artists', 'Discogs_Titles', 'Discogs_URLS'], inplace=True, drop=False)
+            new_df.set_index(['Discogs_Artists', 'Discogs_Titles', 'Discogs_URLS'], inplace=True, drop=False)
+
+            # Performing an outer join and keeping only those records which are unique to new_df
+            self.df = self.df.join(new_df, how='outer', lsuffix='_old', rsuffix='_new', indicator=True)
+            self.df = self.df[self.df['_merge'] == 'right_only']
+
+            # Reset index if needed
+            self.df.reset_index(drop=True, inplace=True)
+
+    def is_duplicate(self, new_df):
+        # Check for duplicates based on a combination of columns
+        # Adjust these columns based on your unique identifier criteria
+        columns_to_check = ['Discogs_Artists', 'Discogs_Titles', 'Discogs_URLS']
+        existing = self.df[columns_to_check]
+        duplicates = new_df[columns_to_check].isin(existing.to_dict(orient='list')).all(axis=1)
+        return duplicates.any()  # Returns True if any duplicates found
+
+    def save_data_to_csv(self):
+        with self.lock:
+            self.df.to_csv(self.csv_file_path, index=False)
+
+    def display_dataframe(self):
+        with self.lock:
+            print(self.df)
+
+class MusicScraperApp:
+    def __init__(self):
+
+        self.session_data_manager = None
+        self.search = DiscogsSearch(start_url='https://www.discogs.com/search/?genre_exact=Electronic&style_exact=Techno&style_exact=Ambient')
+    # ... existing methods
+
+    def start_app(self):
+        self.user_interaction_load_saved_data()
+        self.search.user_interaction()
+
+    def user_interaction_load_saved_data(self):
+        file_path = input("Enter the file path to load saved data from: ")
+        self.load_saved_data(file_path)
+
+    def load_saved_data(self, file_path):
+        self.session_data_manager = SessionDataManager(file_path)
+        self.session_data_manager.display_dataframe()
+
+
+
+    def test_function(self, file_path):
+        # Initialize DataHandler and SessionDataManager
+        #self.data_handler = DataHandler()
+        self.session_data_manager = SessionDataManager(file_path)
+        self.search.test_function(max_rows_to_update=5)
+        self.data_handler = self.search.data_handler
+        # Simulate fetching data - this could be replaced with actual data fetching logic
+        simulated_fetched_data = [
+            {"Discogs_Artists": "Artist 1", "Discogs_Titles": "Title 1", "Discogs_URLS": "http://example.com/1", "Discogs_Labels": "Label 1"},
+            {"Discogs_Artists": "Artist 2", "Discogs_Titles": "Title 2", "Discogs_URLS": "http://example.com/2", "Discogs_Labels": "Label 2"}
+        ]
+
+        # Update the DataHandler's DataFrame with the new data
+        self.data_handler.update_dataframe(simulated_fetched_data)
+
+        # Display the DataHandler's DataFrame
+        print("DataHandler's DataFrame after fetching new data:")
+        self.data_handler.display_dataframe()
+
+        # Add the data from DataHandler to SessionDataManager
+        for index, row in self.data_handler.df.iterrows():
+            self.session_data_manager.add_new_data(row.to_dict())
+
+        # Display the SessionDataManager's DataFrame to show the result
+        print("\nSessionDataManager's DataFrame after adding new data:")
+        self.session_data_manager.display_dataframe()
+
+        # Optionally, save the SessionDataManager's DataFrame to CSV
+        self.session_data_manager.save_data_to_csv('updated_saved_data.csv')
+
+
+
 
 """
 
