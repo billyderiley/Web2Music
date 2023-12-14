@@ -4,6 +4,21 @@ from main import BaseScraper, DiscogsSearchScraper, DiscogsSearch, DiscogsReleas
 discogs_base_url = "https://www.discogs.com/search/"
 youtube_api_key = 'AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg' # Use this key in your application by passing it with the key=API_KEY parameter.
 
+class TestDiscogsReleaseScraper(unittest.TestCase):
+
+        """def test_set_up(self):
+            test_release = "https://www.discogs.com/release/28855378-Lana-Del-Rey-Lust-For-Life"
+            my_youtube_API_Key = 'AIzaSyCBZ6lIgO9qQdVou_aAyONBEngCsWG5-eg'
+            self.Discogs_Release_Scraper = DiscogsReleaseScraper(test_release)"""
+
+        def test_process_release(self):
+            # with youtube api
+            my_youtube_API_Key = 'AIzaSyCBZ6lIgO9qQdVou_aAyONBEngCsWG5-eg'
+            #test_release = "https://www.discogs.com/release/28855378-Lana-Del-Rey-Lust-For-Life"
+            self.Discogs_Release_Scraper = DiscogsReleaseScraper()
+            self.Discogs_Release_Scraper.navigate_to_release_url(self.Discogs_Release_Scraper.base_discogs_search_url)
+            self.Discogs_Release_Scraper.display_dataframe()
+
 class TestDiscogsSearch(unittest.TestCase):
     def test_set_up(self):
         #test_url = discogs_base_url

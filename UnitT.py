@@ -44,14 +44,14 @@ class TestDiscogsReleaseScraper(unittest.TestCase):
     def test_set_up(self):
         test_release = "https://www.discogs.com/release/28624954-Jon-Hopkins-LateNightTales"
         my_youtube_API_Key = 'AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg'
-        self.Discogs_Release_Scraper = DiscogsReleaseScraper()
+        self.Discogs_Release_Scraper = DiscogsReleaseScraper(test_release)
 
     def test_process_release(self):
         # with youtube api
         my_youtube_API_Key = 'AIzaSyCBZ6lIgO9qQdVou_aAyONBEngCsWG5-eg'
         test_release = "https://www.discogs.com/release/28624954-Jon-Hopkins-LateNightTales"
-        self.Discogs_Release_Scraper = DiscogsReleaseScraper()
-        self.Discogs_Release_Scraper.get_release_page_content(test_release)
+        self.Discogs_Release_Scraper = DiscogsReleaseScraper(test_release)
+        self.Discogs_Release_Scraper.get_release_url_content(test_release)
 
 class TestDataHandler(unittest.TestCase):
     def test(self):
