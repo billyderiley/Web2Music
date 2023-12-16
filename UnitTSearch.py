@@ -1,8 +1,19 @@
 import unittest
 from unittest.mock import patch
-from main import BaseScraper, DiscogsSearchScraper, DiscogsSearch, DiscogsReleaseScraper, DataHandler, SessionDataManager, MusicScraperApp
+from unittest.mock import patch, Mock
+from main import BaseScraper, DiscogsSearchScraper, DiscogsSearch, DiscogsReleaseScraper, DataHandler, SpotifyAPI
 discogs_base_url = "https://www.discogs.com/search/"
 youtube_api_key = 'AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg' # Use this key in your application by passing it with the key=API_KEY parameter.
+
+
+class TestSpotifyAPI(unittest.TestCase):
+    def test_(self):
+        client_id = '2ea9899462614265a2b26b43c68cf72a'
+        client_secret = 'fb29534f29134f618623b02cfe8dbc65'
+        redirect_uri = 'https://open.spotify.com'
+        spotify_api = SpotifyAPI(client_id, client_secret, redirect_uri)
+        spotify_api.user_menu()
+
 
 class TestDiscogsReleaseScraper(unittest.TestCase):
 
@@ -14,17 +25,18 @@ class TestDiscogsReleaseScraper(unittest.TestCase):
         def test_process_release(self):
             # with youtube api
             my_youtube_API_Key = 'AIzaSyCBZ6lIgO9qQdVou_aAyONBEngCsWG5-eg'
-            #test_release = "https://www.discogs.com/release/28855378-Lana-Del-Rey-Lust-For-Life"
+            test_release = "https://www.discogs.com/release/28855378-Lana-Del-Rey-Lust-For-Life"
             self.Discogs_Release_Scraper = DiscogsReleaseScraper()
-            self.Discogs_Release_Scraper.navigate_to_release_url(self.Discogs_Release_Scraper.base_discogs_search_url)
-            self.Discogs_Release_Scraper.display_dataframe()
+            current_url_release_info_dict = self.Discogs_Release_Scraper.get_Soup_from_url(test_release)
+            self.Discogs_Release_Scraper.add_new_release(current_url_release_info_dict)
+            self.Discogs_Release_Scraper.save_release_dataframe()
 
 class TestDiscogsSearch(unittest.TestCase):
     def test_set_up(self):
         #test_url = discogs_base_url
-        test_url = 'https://www.discogs.com/search/?genre_exact=Electronic&style_exact=Techno&style_exact=Ambient&page=5'
+        test_url = 'https://www.discogs.com/search/'
         self.Discogs_Search = DiscogsSearch(test_url)
-        self.Discogs_Search.test_function(max_rows_to_update=5)
+        self.Discogs_Search.user_interaction()
 """
     def test_getSearchOptions(self):
         test_url = discogs_base_url
@@ -41,12 +53,14 @@ class TestDiscogsSearch(unittest.TestCase):
 
 class TestDataHandler(unittest.TestCase):
     def test(self):
-        test_url = discogs_base_url
+        #test_url = discogs_base_url
         # Create an instance of DataHandler
-        data_handler = DataHandler()
+        #data_handler = DataHandler()
         # Create an instance of DiscogsSearch and pass data_handler to it
-        discogs_search = DiscogsSearch(test_url, data_handler)
-        discogs_search.user_interaction()
+        test_search = "https://www.discogs.com/search/?style_exact=Ambient&style_exact=Techno&format_exact=Vinyl&genre_exact=Electronic"
+        discogs_search = DiscogsSearch(start_url=test_search)
+        #discogs_search.user_interaction()
+        discogs_search.test_function()
 
         #discogs_search.search_page_user_interaction()
         #discogs_search.search_page_user_interaction()
@@ -55,28 +69,6 @@ class TestDataHandler(unittest.TestCase):
         #data_handler.display_dataframe()
 
 
-class TestSessionHandler(unittest.TestCase):
-
-    def test_setupSessionHandler(self):
-        # Usage example
-        data_manager = SessionDataManager('saved_data.csv')
-        print(data_manager.dataframe)
-        # Add new data, compare dataframes, save data, etc.
-
-class TestMusicScraperApp(unittest.TestCase):
-    def test_123(self):
-        load_save = 'default_df_save.csv'
-        session_data_manager = SessionDataManager(load_save)
-        discogs_search = DiscogsSearch(discogs_base_url)
-        discogs_search.test_function(max_rows_to_update=3)
-        session_data_manager.compare_and_update_data(discogs_search.data_handler.df)
-        print('done')
-        session_data_manager.save_data_to_csv()
-
-        #app = MusicScraperApp()
-        #app.start_app()
-        #app.test_function(file_path="saved_data.csv")
-        #app.data_handler.display_dataframe()
 
 if __name__ == '__main__':
     unittest.main()
