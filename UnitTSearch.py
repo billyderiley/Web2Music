@@ -1,7 +1,9 @@
 import unittest
-from unittest.mock import patch
-from unittest.mock import patch, Mock
-from main import BaseScraper, DiscogsSearchScraper, DiscogsSearch, DiscogsReleaseScraper, DataHandler, SpotifyAPI
+from SpotifyPlaylistCreation import SpotifyPlaylistCreation
+from DiscogsReleaseScraper import DiscogsReleaseScraper
+from DiscogsSearchGUI import DiscogsSearchGUI
+from ScrapeDataHandler import DataHandler
+
 discogs_base_url = "https://www.discogs.com/search/"
 youtube_api_key = 'AIzaSyAUCZgYUeP4Xcj-kw88V6X7VfcjQdBPtAg' # Use this key in your application by passing it with the key=API_KEY parameter.
 
@@ -11,7 +13,7 @@ class TestSpotifyAPI(unittest.TestCase):
         client_id = '2ea9899462614265a2b26b43c68cf72a'
         client_secret = 'fb29534f29134f618623b02cfe8dbc65'
         redirect_uri = 'https://open.spotify.com'
-        spotify_api = SpotifyAPI(client_id, client_secret, redirect_uri)
+        spotify_api = SpotifyPlaylistCreation(client_id, client_secret, redirect_uri)
         spotify_api.user_menu()
 
 
@@ -35,7 +37,8 @@ class TestDiscogsSearch(unittest.TestCase):
     def test_set_up(self):
         #test_url = discogs_base_url
         test_url = 'https://www.discogs.com/search/'
-        self.Discogs_Search = DiscogsSearch(test_url)
+ # The code snippet is a unit test for various classes related to Spotify playlist creation, Discogs release scraping, Discogs search, and data handling. It tests various methods and functionalities of these classes to ensure they are working correctly.
+        self.Discogs_Search = DiscogsSearchGUI(test_url)
         self.Discogs_Search.user_interaction()
 """
     def test_getSearchOptions(self):
@@ -57,10 +60,11 @@ class TestDataHandler(unittest.TestCase):
         # Create an instance of DataHandler
         #data_handler = DataHandler()
         # Create an instance of DiscogsSearch and pass data_handler to it
-        test_search = "https://www.discogs.com/search/?style_exact=Ambient&style_exact=Techno&format_exact=Vinyl&genre_exact=Electronic"
-        discogs_search = DiscogsSearch(start_url=test_search)
+        ztest_search = "https://www.discogs.com/search/?style_exact=Ambient&style_exact=Techno&format_exact=Vinyl&genre_exact=Electronic"
+        #test_search = "https://www.discogs.com/search/"
+        #discogs_search = DiscogsSearch(start_url=test_search)
         #discogs_search.user_interaction()
-        discogs_search.test_function()
+        #discogs_search.test_function()
 
         #discogs_search.search_page_user_interaction()
         #discogs_search.search_page_user_interaction()
