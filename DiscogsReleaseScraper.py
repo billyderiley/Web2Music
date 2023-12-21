@@ -1,12 +1,14 @@
 from BaseScraper import BaseScraper
 import pandas as pd
+import os
 
 
 class DiscogsReleaseScraper(BaseScraper):
 
-    def __init__(self, data_handler = None):
+    def __init__(self,):
         super().__init__()
-        self.Release_Dataframe = DiscogsReleaseScraper.create_Release_Dataframe()
+        #self.Search_Dataframe = Search_Dataframe
+        self.Release_Dataframe = self.create_Release_Dataframe()
         self.current_url_release_info_dict = None
         #if data_handler is not None:
         #    self.data_handler = data_handler
@@ -28,14 +30,30 @@ class DiscogsReleaseScraper(BaseScraper):
         return current_url_release_info_dict
 
 
-    @staticmethod
-    def create_Release_Dataframe():
+    #@staticmethod
+    def create_Release_Dataframe(self):
         release_dataframe = pd.DataFrame(columns=['Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
             , 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years', 'Discogs_Formats','Discogs_Urls', 'Discogs_YouTube_Videos'])
         return release_dataframe
 
     def save_release_dataframe(self):
         self.Release_Dataframe.to_csv(path_or_buf='release_dataframe.csv', index=False)
+
+        self.Release_Dataframe = None
+
+    def load_data(self, csv_file):
+        self.Release_Dataframe = pd.read_csv(csv_file)
+        print(f"Data loaded from {csv_file}")
+
+    def list_csv_files(self):
+        print("Available CSV files:")
+        csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
+        for idx, file in enumerate(csv_files, 1):
+            print(f"{idx}. {file}")
+        return csv_files
+
+    #def load_release_dataframe(self):
+   #     self.Release_Dataframe = pd.read_csv('release_dataframe.csv')
 
     def display_dataframe(self):
         print(self.Release_Dataframe)

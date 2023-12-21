@@ -31,16 +31,6 @@ class DiscogsSearchScraper(BaseScraper):
         #else:
         #    self.data_handler = data_handler
 
-    def save_Search_Dataframe(self, path):
-        if path.endswith('.csv'):
-            pass
-        else:
-            path = path+'.csv'
-        #path = input("Enter a Save name for Dataframe")
-        self.Search_Dataframe.to_csv(path_or_buf=path, index=False)
-
-    def display_Search_Dataframedata(self):
-        print(self.Search_Dataframe)
 
 
     """def update_release_dataframe(self, release_table_content, release_tracklist_content, release_video_links_content):
@@ -68,7 +58,7 @@ class DiscogsSearchScraper(BaseScraper):
         return current_search_url_info_dict
 
 
-    def update_search_dataframe(self):
+    """def update_search_dataframe(self):
         if self.center_releases_content is not None:
             if isinstance(self.center_releases_content, list):
                 # Convert the list of dictionaries to a DataFrame
@@ -85,7 +75,11 @@ class DiscogsSearchScraper(BaseScraper):
         self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
             subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
                                                 "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])"""
+
+    def deep_search_release_info(self):
+        pass
+
 
     def get_current_search_page_content(self):
         base_url = self.current_url

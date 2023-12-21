@@ -63,7 +63,7 @@ class TestDataHandler(unittest.TestCase):
         discogs_search = DiscogsSearch(test_url, data_handler)
 
         # At this point, data_handler's DataFrame should be updated with the content
-        data_handler.display_dataframe()
+        #data_handler.display_dataframe()
 
 if __name__ == '__main__':
     unittest.main()

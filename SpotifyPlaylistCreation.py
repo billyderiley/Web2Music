@@ -3,16 +3,29 @@ import spotipy
 import pandas as pd
 import os
 import re
+from ScrapeDataHandler import DataHandler
+from SpotifyScraper import SpotifyScraper
+from datetime import datetime
 
-class SpotifyPlaylistCreation:
-    def __init__(self, client_id, client_secret, redirect_uri):
+class SpotifyPlaylistCreation(SpotifyScraper):
+    def __init__(self, client_id, client_secret, redirect_uri, data_handler):
         self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id,
                                                             client_secret=client_secret,
                                                             redirect_uri=redirect_uri,
                                                             scope="playlist-modify-public"))
-        self.df = None
+        super().__init__(self.sp)
+        self.data_handler = data_handler  # DataHandler instance
+        #self.df = None
+        self._loaded_csv_file = None
 
-    def load_data(self, csv_file):
+    def load_spotify_dataframe(self, csv_file):
+        """Load a CSV file into the Spotify Dataframe managed by DataHandler."""
+        # Load CSV file using DataHandler and set it as the Spotify Dataframe
+        spotify_df = self.data_handler.load_data(csv_file)
+        self.data_handler.set_spotify_dataframe(spotify_df)
+        print(f"Spotify DataFrame loaded from {csv_file}")
+
+    """def load_data(self, csv_file):
         self.df = pd.read_csv(csv_file)
         print(f"Data loaded from {csv_file}")
 
@@ -22,7 +35,7 @@ class SpotifyPlaylistCreation:
         csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
         for idx, file in enumerate(csv_files, 1):
             print(f"{idx}. {file}")
-        return csv_files
+        return csv_files"""
 
     def search_spotify(self, artist, title):
         query = f"artist:{artist} track:{title}"
@@ -49,13 +62,13 @@ class SpotifyPlaylistCreation:
         for i in range(0, len(input_list), chunk_size):
             yield input_list[i:i + chunk_size]
 
-    def generate_playlist_from_dataframe(self):
+    """def generate_playlist_from_dataframe_backup(self):
+        playlist_name = self.get_user_input_playlist_name(suggestion=self._loaded_csv_file)
         track_uris = set()
         for _, row in self.df.iterrows():
             artist = row['Discogs_Artists']
             title = row['Discogs_Titles']
             top_tracks = self.search_spotify(artist, title)
-
             if top_tracks:
                 album_id = top_tracks[0]['album']['id']  # Get the album ID of the top track
                 album_tracks = self.sp.album_tracks(album_id)['items']  # Fetch tracks of the album
@@ -63,19 +76,187 @@ class SpotifyPlaylistCreation:
                 for track in album_tracks:
                     track_uris.add(track['uri'])  # Add track URIs to the set
 
-        self.create_playlist(self.get_user_input_playlist_name(), list(track_uris))
+        self.create_playlist(playlist_name, list(track_uris))"""
+
+    def generate_playlist_from_dataframe(self,):
+        # Get user input for playlist name, with a suggestion based on the loaded CSV file
+        playlist_name = self.get_user_input_for_action("playlist", self._loaded_csv_file)
+
+        # Initialize a list to maintain the order of track URIs and a set to check for duplicates
+        track_uris_list = []
+        track_uris_set = set()
+
+        # Iterate over each row in the DataFrame
+        for _, row in self.data_handler.Spotify_Dataframe.iterrows():
+            artist = row['Discogs_Artists']
+            title = row['Discogs_Titles']
+
+            # Search for the top track on Spotify for the given artist and title
+            top_tracks = self.search_spotify(artist, title)
+
+            if top_tracks:
+                # Fetch the artist's information from Spotify using their ID
+                artist_id = top_tracks[0]['artists'][0]['id']
+                #artist_info = self.sp.artist(artist_id)
+
+                # Fetch artist metrics from Spotify
+                artist_metrics = self.get_artist_metrics(artist_id)
+                # Update the Spotify DataFrame with these metrics
+                self.data_handler.update_spotify_dataframe_with_artist_metrics(artist, artist_metrics)
+
+                # Get the album ID of the top track and fetch tracks of the album
+                album_id = top_tracks[0]['album']['id']
+                album_tracks = self.sp.album_tracks(album_id)['items']
+
+                # Iterate over the album's tracks
+                for track in album_tracks:
+                    # Check if the track URI is not already in the set (to avoid duplicates)
+                    if track['uri'] not in track_uris_set:
+                        # Concatenate artist names (for tracks with multiple artists)
+                        artist_names = ', '.join(artist['name'] for artist in track['artists'])
+
+                        # Print the found track information
+                        print(f"Found track: {artist_names} - {track['name']}")
+
+                        # Add the track URI to the set and list
+                        track_uris_set.add(track['uri'])
+                        track_uris_list.append(track['uri'])
+                    else:
+                        # Handle the case where a duplicate track is found
+                        print(f"Duplicate track found: {track['name']}")
+
+        # Create the playlist with the collected track URIs
+        self.create_playlist(playlist_name, track_uris_list)
 
     def generate_single_track_playlist_from_dataframe(self):
+        """Generate a playlist with single tracks from the loaded Spotify DataFrame."""
+        # Ensure the Spotify DataFrame is loaded
+        if self.data_handler.Spotify_Dataframe is None:
+            print("Spotify DataFrame not loaded.")
+            return
+
+        playlist_name = self.get_user_input_for_action("playlist", self._loaded_csv_file)
         track_uris = []
-        for _, row in self.df.iterrows():
+
+        # Iterate over each row in the Spotify DataFrame
+        for _, row in self.data_handler.Spotify_Dataframe.iterrows():
             tracks = self.search_spotify(row['Discogs_Artists'], row['Discogs_Titles'])
             if tracks:
-                track_uris.append(tracks[0]['uri'])  # Assuming you want the first search result
-        self.create_playlist(self.get_user_input_playlist_name(), track_uris)
+                # Fetch artist metrics and update the DataFrame
+                artist_id = tracks[0]['artists'][0]['id']
+                artist_metrics = self.get_artist_metrics(artist_id)
+                artist = row['Discogs_Artists']
+                self.data_handler.update_spotify_dataframe_with_artist_metrics(artist, artist_metrics)
 
+                # Add the first track's URI to the playlist
+                track_uris.append(tracks[0]['uri'])
 
+        # Create the playlist with the collected track URIs
+        self.create_playlist(playlist_name, track_uris)
 
     def create_playlist_from_selected_artists(self):
+        """Create a playlist from selected artists in the loaded Spotify DataFrame."""
+        # Ensure the Spotify DataFrame is loaded
+        if self.data_handler.Spotify_Dataframe is None:
+            print("Spotify DataFrame not loaded.")
+            return
+
+        unique_artists = self.data_handler.Spotify_Dataframe['Discogs_Artists'].unique()
+
+        # Display and select artists
+        for idx, artist in enumerate(unique_artists, 1):
+            print(f"{idx}. {artist}")
+
+        selected_indices = input(
+            "Enter the numbers of the artists you want to select, separated by commas (e.g., 1,3,5): ")
+        selected_indices = [int(i.strip()) for i in selected_indices.split(',')]
+
+        track_uris_list = []
+        track_uris_set = set()
+
+        # Iterate over selected artist indices
+        for index in selected_indices:
+            artist = unique_artists[index - 1]
+            titles = self.data_handler.Spotify_Dataframe[self.data_handler.Spotify_Dataframe['Discogs_Artists'] == artist][ 'Discogs_Titles']
+
+            for title in titles:
+                print(f"Searching top track for {artist} - {title}...")
+                top_tracks = self.search_spotify(artist, title)
+
+                if top_tracks:
+                    # Fetch artist metrics and update the DataFrame
+                    artist_spotify_id = top_tracks[0]['artists'][0]['id']
+                    artist_metrics = self.get_artist_metrics(artist_spotify_id)
+                    self.data_handler.update_spotify_dataframe_with_artist_metrics(artist, artist_metrics)
+
+                    # Add unique track URIs to the playlist
+                    for track in self.search_spotify_tracks_by_artist_id(artist_spotify_id):
+                        if track['uri'] not in track_uris_set:
+                            track_uris_set.add(track['uri'])
+                            track_uris_list.append(track['uri'])
+
+        # Create the playlist if there are tracks to add
+        if track_uris_list:
+            playlist_name = self.get_user_input_for_action("playlist", default_suggestion=artist)
+            self.create_playlist(playlist_name, track_uris_list)
+        else:
+            print("No tracks to add to the playlist. Playlist creation skipped.")
+
+    """def create_playlist_from_selected_artists_backup(self):
+        # Retrieve unique artist names from the DataFrame
+        unique_artists = self.df['Discogs_Artists'].unique()
+        for idx, artist in enumerate(unique_artists, 1):
+            print(f"{idx}. {artist}")
+
+        # Prompt user to select artists by their indices
+        selected_indices = input(
+            "Enter the numbers of the artists you want to select, separated by commas (e.g., 1,3,5): ")
+        selected_indices = [int(i.strip()) for i in selected_indices.split(',')]
+
+        # Initialize a list to maintain the order of track URIs and a set to check for duplicates
+        track_uris_list = []
+        track_uris_set = set()
+
+        # Iterate over selected artist indices
+        for index in selected_indices:
+            artist = unique_artists[index - 1]  # Get artist name by index
+            titles = self.df[self.df['Discogs_Artists'] == artist]['Discogs_Titles']  # Retrieve titles for the artist
+
+            # Iterate over the titles of the selected artist
+            for title in titles:
+                print(f"Searching top track for {artist} - {title}...")
+
+                # Search for the top Spotify track for the given artist and title
+                top_tracks = self.search_spotify(artist, title)
+                if top_tracks:
+
+                    artist_spotify_id = top_tracks[0]['artists'][0]['id']  # Extract artist's Spotify ID
+
+                    print(f"Searching all tracks for artist ID {artist_spotify_id}...")
+                    all_tracks = self.search_spotify_tracks_by_artist_id(artist_spotify_id)
+                    if all_tracks:
+                        # Use inherited method to get artist metrics
+                        artist_metrics = self.get_artist_metrics(artist_spotify_id)
+
+                        # Update DataFrame with the new metrics
+                        self.update_dataframe_with_artist_metrics(artist, artist_metrics)
+                    # Iterate over found tracks and add unique URIs to the list and set
+                    for track in all_tracks:
+                        if track['uri'] not in track_uris_set:
+                            track_uris_set.add(track['uri'])
+                            track_uris_list.append(track['uri'])
+
+        # Check if the list of track URIs is empty
+        if not track_uris_list:
+            print("No tracks to add to the playlist. Playlist creation skipped.")
+            return
+        else:
+            # Prompt user for playlist name and create the playlist
+            playlist_name = self.get_user_input_playlist_name(suggestion=artist)
+            self.create_playlist(playlist_name, track_uris_list)"""
+
+    """def create_playlist_from_selected_artists_backup(self):
+
         unique_artists = self.df['Discogs_Artists'].unique()
         for idx, artist in enumerate(unique_artists, 1):
             print(f"{idx}. {artist}")
@@ -103,8 +284,12 @@ class SpotifyPlaylistCreation:
                         if not self.is_duplicate_track(existing_tracks, track):
                             track_uris.add(track['uri'])
                             existing_tracks.append(track)
-
-        self.create_playlist(self.get_user_input_playlist_name(), list(track_uris))
+        if not track_uris:
+            print("No tracks to add to the playlist. Playlist creation skipped.")
+            return
+        else:
+            playlist_name = self.get_user_input_playlist_name(suggestion=artist)
+            self.create_playlist(playlist_name, list(track_uris))"""
 
 
     def search_spotify_tracks_by_artist_id(self, artist_id):
@@ -172,33 +357,56 @@ class SpotifyPlaylistCreation:
 
     def user_menu(self):
         while True:
-            print("\nSpotify Playlist Creator Menu")
+            # Check if the Spotify DataFrame is present and display an appropriate message
+            if self.data_handler.Spotify_Dataframe is not None and not self.data_handler.Spotify_Dataframe.empty:
+                print("\n" + "=" * 30)
+                message = "Spotify DataFrame present\n."
+                if self._loaded_csv_file:
+                    message += " (Loaded from: " + self._loaded_csv_file + ")"
+                print(f"  {message}")
+                print("=" * 30)
+            else:
+                print("\n" + "=" * 30)
+                print("  No Spotify DataFrame currently loaded.")
+                print("=" * 30)
+
+            print("Spotify Playlist Creator Menu")
             print("1. Load CSV file")
             print("2. Create a playlist from the entire DataFrame")
             print("3. Create a playlist from selected artists")
-            print("4. Exit")
+            print("4. Save Spotify DataFrame to CSV")
+            print("5. Exit")
             choice = input("Enter your choice: ")
 
             if choice == '1':
-                csv_files = self.list_csv_files()
+                # List available CSV files and prompt user to select one
+                csv_files = self.data_handler.list_csv_files()
                 if not csv_files:
                     print("No CSV files found in the current directory.")
                     continue
 
                 file_index = int(input("Enter the number of the CSV file to load: ")) - 1
                 if 0 <= file_index < len(csv_files):
-                    self.load_data(csv_files[file_index])
+                    # Load the selected CSV file into the Spotify DataFrame
+                    self.load_spotify_dataframe(csv_files[file_index])
+                    self._loaded_csv_file = csv_files[file_index]
                 else:
                     print("Invalid file number.")
             elif choice == '2':
+                # Generate a playlist based on the entire loaded Spotify DataFrame
                 self.generate_playlist_from_dataframe()
             elif choice == '3':
+                # Create a playlist from selected artists within the loaded Spotify DataFrame
                 self.create_playlist_from_selected_artists()
             elif choice == '4':
+                # Get user input for the file name to save the Spotify DataFrame
+                save_name = self.get_user_input_for_action("save file", self._loaded_csv_file)
+                self.data_handler.save_Spotify_Dataframe(save_name)
+            elif choice == '5':
                 print("Exiting...")
                 break
             else:
-                print("Invalid choice, please enter a number between 1 and 4.")
+                print("Invalid choice, please enter a number between 1 and 5.")
 
 
     def normalize_track_name(self, name):
@@ -216,10 +424,71 @@ class SpotifyPlaylistCreation:
                     return True
         return False
 
-    def get_user_input_playlist_name(self):
-        default_name = "My Spotify Playlist"
-        user_input_name = input("Enter a name for your playlist (leave blank for default): ").strip()
-        return user_input_name if user_input_name else default_name
+    def get_user_input_for_action(self, action_type, default_suggestion=None):
+        """
+        Get user input for a specified action (e.g., playlist name, save file name) with suggestions.
+
+        :param action_type: A string indicating the type of action (e.g., 'playlist', 'save file')
+        :param default_suggestion: A default suggestion if any (e.g., loaded file name)
+        :return: User input or chosen suggestion for the action
+        """
+        suggestions = []
+        default_name = default_suggestion if default_suggestion else f"Spotify_{action_type.capitalize()}"
+
+        # Generate a suggestion based on the current date and time
+        date_suggestion = f"Created_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        default_name = f"{default_name} Discography " + datetime.now().strftime("%Y-%m-%d")
+        suggestions.append(default_name)
+        suggestions.append(date_suggestion)
+
+        # Display the suggestions to the user
+        for i, suggestion in enumerate(suggestions, start=1):
+            print(f"{i}. {suggestion}")
+
+        # Prompt the user for input
+        user_input = input(
+            f"Enter a name for your {action_type}, or a digit corresponding to a suggested name: ").strip()
+
+        # Validate the user input
+        if user_input.isdigit() and int(user_input) <= len(suggestions):
+            return suggestions[int(user_input) - 1]
+        elif user_input:
+            return user_input
+        else:
+            return default_name
+
+    """def get_user_input_playlist_name(self, suggestion: str = None):
+        suggestions = []
+        default_name = ""
+
+        # Check if a suggestion is provided
+        if suggestion:
+            if suggestion.endswith('.csv'):
+                suggestion = suggestion.replace('.csv', '')
+                default_name = suggestion
+            else:
+                default_name = suggestion + " Discography"
+            suggestions.append(default_name)
+
+        # Generate a suggestion based on the current date and time
+        date = datetime.datetime.now()
+        suggestion = "Discogify " + date.strftime("%Y-%m-%d %H:%M:%S")
+        suggestions.append(suggestion)
+
+        # Display the suggestions to the user
+        for i, suggestion in enumerate(suggestions, start=1):
+            print(f"{i}. {suggestion}")
+
+        # Prompt the user for input
+        user_input = input("Enter a name for your playlist, or a digit corresponding to a suggested name: ").strip()
+
+        # Validate the user input
+        if user_input.isdigit() and int(user_input) <= len(suggestions):
+            return suggestions[int(user_input) - 1]
+        elif user_input:
+            return user_input
+        else:
+            return default_name"""
 
     """def create_playlist_from_selected_artists_old(self):
             unique_artists = self.df['Discogs_Artists'].unique()

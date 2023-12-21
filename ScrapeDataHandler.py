@@ -1,27 +1,58 @@
 from DiscogsSearchScraper import DiscogsSearchScraper
 from DiscogsReleaseScraper import DiscogsReleaseScraper
 import pandas as pd
+import os
+from datetime import datetime
 import time
 import random
 
 
 class DataHandler:
-    def __init__(self, search_df = None, csv_file = None):
-        if csv_file is None:
-            if search_df is None:
-                self.search_df = None
-            #else:
-            #    self.search_df = search_df
-        else:
-            self.df = self.loadfromCSV(csv_file=csv_file)
-        self.discogs_search_scraper = DiscogsSearchScraper()
-        self.discogs_release_content_scraper = DiscogsReleaseScraper()
+
+    @staticmethod
+    def load_data(csv_file):
+        df = pd.read_csv(csv_file)
+        print(f"Data loaded from {csv_file}")
+        return df
+
+    @staticmethod
+    def list_csv_files():
+        print("Available CSV files:")
+        csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
+        for idx, file in enumerate(csv_files, 1):
+            print(f"{idx}. {file}")
+        return csv_files
+    def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None):
+        self.Search_Dataframe = Search_Dataframe
+        self.Release_Dataframe = Release_Dataframe
+        self.Spotify_Dataframe = Spotify_Dataframe
+
+    def set_spotify_dataframe(self, df):
+        """Set the Spotify DataFrame."""
+        self.Spotify_Dataframe = df
+
+    def update_spotify_dataframe_with_artist_metrics(self, artist, artist_metrics):
+        """Update the Spotify DataFrame with artist's Spotify popularity and followers."""
+        if 'Spotify_Popularity_Followers' not in self.Spotify_Dataframe.columns:
+            self.Spotify_Dataframe['Spotify_Popularity_Followers'] = None
+
+        popularity, followers = artist_metrics
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Update the DataFrame with the artist metrics and the current timestamp
+        self.Spotify_Dataframe.loc[self.Spotify_Dataframe[
+                                       'Discogs_Artists'] == artist, 'Spotify_Popularity_Followers'] = f"{popularity}, {followers}, {current_time}"
 
 
-    def display_dataframe(self):
-        print(self.df)
+    """def display_dataframe(self):
+        if self.Search_Dataframe is not None:
+            print("Search Dataframe :")
+            print(self.Search_Dataframe)
+        if self.Release_Dataframe is not None:
+            print("Release Dataframe :")
+            print(self.Release_Dataframe)"""
 
-    def save_dataframe(self, save_as_file_name):
+
+    """def save_dataframe(self, save_as_file_name):
         if save_as_file_name is None:
             save_as_file_name = "1_-2test"
         else:
@@ -29,13 +60,74 @@ class DataHandler:
                 save_as_file_name = save_as_file_name
             else:
                 save_as_file_name += '.csv'
-        self.df.to_csv(path_or_buf=save_as_file_name)
+        self.df.to_csv(path_or_buf=save_as_file_name)"""
 
     def loadfromCSV(self, csv_file):
         try:
-           return pd.read_csv(csv_file)
+            return pd.read_csv(csv_file)
         except FileNotFoundError:
             return None
+
+
+    def save_Search_Dataframe(self, path):
+        if path.endswith('.csv'):
+            pass
+        else:
+            path = path+'.csv'
+        #path = input("Enter a Save name for Dataframe")
+        self.Search_Dataframe.to_csv(path_or_buf=path, index=False)
+
+    def save_Spotify_Dataframe(self, path):
+        """Save the Spotify DataFrame to a CSV file."""
+        # Ensure the file name ends with .csv
+        if not path.endswith('.csv'):
+            path += '.csv'
+
+        # Check if the Spotify DataFrame is not empty
+        if self.Spotify_Dataframe is not None:
+            # Save the DataFrame to the specified path
+            self.Spotify_Dataframe.to_csv(path_or_buf=path, index=False)
+            print(f"Spotify DataFrame saved to {path}")
+        else:
+            print("No Spotify DataFrame to save.")
+
+    def display_Search_Dataframedata(self):
+        print(self.Search_Dataframe)
+
+    def update_search_dataframe(self, center_releases_content):
+        if center_releases_content is not None:
+            if isinstance(center_releases_content, list):
+                # Convert the list of dictionaries to a DataFrame
+                new_df = pd.DataFrame(center_releases_content, columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
+
+            else:
+                raise ValueError("new_data must be a list of dictionaries")
+        else:
+            raise ValueError("self.center_releases_content is None")
+
+        # Concatenate new_df with self.df and drop duplicates
+        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
+            subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
+
+
+    def transformSearchDf2ReleaseDf(self):
+        if self. Search_Dataframe is None:
+            print("DataHandler has no Search_Dataframe to transform")
+            return
+        else:
+                self.DiscogsReleaseScrape_obj = DiscogsReleaseScraper()
+                for index, row in self.Search_Dataframe.iterrows():
+                    url = row['Discogs_Urls']
+                    current_url_release_info_dict = self.DiscogsReleaseScrape_obj.get_current_release_url_content(url)
+                    self.DiscogsReleaseScrape_obj.add_new_release(current_url_release_info_dict)
+        print("Transformed Search_Dataframe to Release_Dataframe")
+        print("Release_Dataframe :")
+        print(self.DiscogsReleaseScrape_obj.Release_Dataframe)
+
 
 
     """def find_missing_data(self):

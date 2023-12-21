@@ -58,7 +58,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
     def updateDataFrame(self):
         if self.center_releases_content is not None:
             print("Possible to update dataframe with content...")
-        self.update_search_dataframe()
+        self.data_handler.update_search_dataframe(self.center_releases_content)
 
     def updateSortByDict(self, sort_by_dict):
         self.sort_by_dict = sort_by_dict
@@ -69,7 +69,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             '1': self.user_interaction_add_filters,
             '2': self.user_interaction_update_sort_by,  # Function for 'Update Sort By'
             '3': self.user_interaction_display_dataframe,
-            '4': self.user_interaction_fill_in_blanks,
+            '4': self.user_interaction_release_dataframe_deep_search,
             '5': self.updateDataFrame,
             '6': self.user_interaction_save_dataframe,
             '7': self.user_interaction_select_pages,
@@ -81,7 +81,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             print("1: Apply Filters Page \n"
                   "2: Update Sort By \n"  # New option
                   "3: Display DataFrame \n"
-                  "4: Fill in DataFrame \n"
+                  "4: Do Release Info Deep Search \n"
                   "5: Update DataFrame \n"
                   "6: Save DataFrame to CSV \n"
                   "7: Scrape Pages \n"
@@ -218,7 +218,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             print(page)
             self.navigate_to_search_url(page)
             self.updateDataFrame()
-            print(self.display_Search_Dataframedata())
+            #print(self.display_Search_Dataframedata())
         self.save_Search_Dataframe(path='test_dataframe.csv')
         # max_rows = 3
         # print(" max number of rows is 5")
@@ -242,18 +242,21 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         print(
             f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]}")
 
-    def user_interaction_fill_in_blanks(self):
-        max_rows = int(input("Enter the number of rows to fill in: "))
-        if max_rows == '':
-            max_rows = None
-        self.data_handler.fill_in_missing_data(max_rows_to_update=max_rows)
+    def user_interaction_release_dataframe_deep_search(self):
+        self.data_handler.transformSearchDf2ReleaseDf()
+
+
+        #max_rows = int(input("Enter the number of rows to fill in: "))
+       # if max_rows == '':
+       #     max_rows = None
+       # self.data_handler.fill_in_missing_data(max_rows_to_update=max_rows)
 
     def user_interaction_display_dataframe(self):
-        self.display_Search_Dataframedata()
+        self.data_handler.display_Search_Dataframedata()
 
     def user_interaction_save_dataframe(self):
         save_name = input("Enter the name of the file to save as: ")
-        self.save_Search_Dataframe(save_name)
+        self.data_handler.save_Search_Dataframe(save_name)
 
         # self.updateCurrentPageAndNextPage()
         # print(f"now updating applied filters with this {new_applied_filters_list}")
@@ -268,18 +271,27 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         # self.update_center_releases_content(center_releases_content)
 
     def user_interaction_create_spotify_playlist(self):
+        # Initialize SpotifyPlaylistCreation with necessary Spotify credentials and DataHandler instance
+        spotify_api = SpotifyPlaylistCreation(client_id=client_id,
+                                              client_secret=client_secret,
+                                              redirect_uri=redirect_uri,
+                                              data_handler=self.data_handler)
+
+        # If there is a search DataFrame available, set it as the Spotify DataFrame in DataHandler
+        if self.data_handler.Search_Dataframe is not None:
+            spotify_api.data_handler.set_spotify_dataframe(self.data_handler.Search_Dataframe)
+
+        # Call the user menu of SpotifyPlaylistCreation for further actions
+        spotify_api.user_menu()
+
+    """def user_interaction_create_spotify_playlist_backup(self):
         spotify_api = SpotifyPlaylistCreation(client_id=client_id,
                                               client_secret=client_secret,
                                               redirect_uri=redirect_uri)
 
-        spotify_api.df = self.Search_Dataframe  # Pass DataFrame to SpotifyAPI
-        spotify_api.user_menu()  # Call the SpotifyAPI user menu for further actions
+        spotify_api.df = self.data_handler.Search_Dataframe  # Pass DataFrame to SpotifyAPI
+        spotify_api.user_menu()  # Call the SpotifyAPI user menu for further actions"""
 
-        """
-        if self.Search_Dataframe is not None and not self.Search_Dataframe.empty:
-            print("Creating Spotify playlist from Discogs data...")
-        else:
-            print("No data available to create a Spotify playlist. Please run a search first.")"""
 
     def remove_discogs_search_term(self, remove_search_term):
         new_discogs_search_url = self.current_url.strip(remove_search_term)
