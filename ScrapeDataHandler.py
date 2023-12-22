@@ -22,14 +22,27 @@ class DataHandler:
         for idx, file in enumerate(csv_files, 1):
             print(f"{idx}. {file}")
         return csv_files
-    def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None):
+    def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None, loaded_csv_file = None):
         self.Search_Dataframe = Search_Dataframe
         self.Release_Dataframe = Release_Dataframe
         self.Spotify_Dataframe = Spotify_Dataframe
+        self.loaded_csv_file = loaded_csv_file
 
     def set_spotify_dataframe(self, df):
         """Set the Spotify DataFrame."""
         self.Spotify_Dataframe = df
+
+    def set_search_dataframe(self, df):
+        """Set the Search DataFrame."""
+        self.Search_Dataframe = df
+
+    def set_release_dataframe(self, df):
+        """Set the Release DataFrame."""
+        self.Release_Dataframe = df
+
+    def set_loaded_csv_file(self, csv_file):
+        """Set the loaded CSV file."""
+        self.loaded_csv_file = csv_file
 
     def update_spotify_dataframe_with_artist_metrics(self, artist, artist_metrics):
         """Update the Spotify DataFrame with artist's Spotify popularity and followers."""
@@ -98,7 +111,7 @@ class DataHandler:
         if center_releases_content is not None:
             if isinstance(center_releases_content, list):
                 # Convert the list of dictionaries to a DataFrame
-                new_df = pd.DataFrame(center_releases_content, columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+                new_df = pd.DataFrame(center_releases_content, columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
                                                 "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
                                                 "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
 
@@ -109,17 +122,22 @@ class DataHandler:
 
         # Concatenate new_df with self.df and drop duplicates
         self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
-            subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+            subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
                                                 "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
                                                 "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
 
 
-    def transformSearchDf2ReleaseDf(self):
-        if self. Search_Dataframe is None:
-            print("DataHandler has no Search_Dataframe to transform")
+    def update_release_dataframe(self, center_releases_inner_content):
+        if self. Release_Dataframe is None:
+            print("DataHandler has no Release Dataframe to transform")
             return
         else:
-                self.DiscogsReleaseScrape_obj = DiscogsReleaseScraper()
+            if center_releases_inner_content is not None:
+                if isinstance(center_releases_inner_content, list):
+                    # Convert the list of dictionaries to a DataFrame
+                    new_df = pd.DataFrame(center_releases_inner_content, columns=['Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
+            , 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years', 'Discogs_Formats','Discogs_Urls', 'Discogs_YouTube_Videos'])
+                #self.DiscogsReleaseScrape_obj = DiscogsReleaseScraper()
                 for index, row in self.Search_Dataframe.iterrows():
                     url = row['Discogs_Urls']
                     current_url_release_info_dict = self.DiscogsReleaseScrape_obj.get_current_release_url_content(url)

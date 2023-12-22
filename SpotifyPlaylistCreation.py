@@ -16,13 +16,14 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         super().__init__(self.sp)
         self.data_handler = data_handler  # DataHandler instance
         #self.df = None
-        self._loaded_csv_file = None
+        #self._loaded_csv_file = None
 
     def load_spotify_dataframe(self, csv_file):
         """Load a CSV file into the Spotify Dataframe managed by DataHandler."""
         # Load CSV file using DataHandler and set it as the Spotify Dataframe
         spotify_df = self.data_handler.load_data(csv_file)
         self.data_handler.set_spotify_dataframe(spotify_df)
+        self.data_handler.set_loaded_csv_file(csv_file)
         print(f"Spotify DataFrame loaded from {csv_file}")
 
     """def load_data(self, csv_file):
@@ -80,7 +81,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
 
     def generate_playlist_from_dataframe(self,):
         # Get user input for playlist name, with a suggestion based on the loaded CSV file
-        playlist_name = self.get_user_input_for_action("playlist", self._loaded_csv_file)
+        playlist_name = self.get_user_input_for_action("playlist", self.data_handler.loaded_csv_file)
 
         # Initialize a list to maintain the order of track URIs and a set to check for duplicates
         track_uris_list = []
@@ -135,7 +136,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             print("Spotify DataFrame not loaded.")
             return
 
-        playlist_name = self.get_user_input_for_action("playlist", self._loaded_csv_file)
+        playlist_name = self.get_user_input_for_action("playlist", self.data_handler.loaded_csv_file)
         track_uris = []
 
         # Iterate over each row in the Spotify DataFrame
@@ -361,8 +362,8 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             if self.data_handler.Spotify_Dataframe is not None and not self.data_handler.Spotify_Dataframe.empty:
                 print("\n" + "=" * 30)
                 message = "Spotify DataFrame present\n."
-                if self._loaded_csv_file:
-                    message += " (Loaded from: " + self._loaded_csv_file + ")"
+                if self.data_handler.loaded_csv_file:
+                    message += " (Loaded from: " + self.data_handler.loaded_csv_file + ")"
                 print(f"  {message}")
                 print("=" * 30)
             else:
@@ -389,7 +390,8 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 if 0 <= file_index < len(csv_files):
                     # Load the selected CSV file into the Spotify DataFrame
                     self.load_spotify_dataframe(csv_files[file_index])
-                    self._loaded_csv_file = csv_files[file_index]
+                    self.data_handler.set_loaded_csv_file(csv_files[file_index])
+                    #self.data_handler.loaded_csv_file = csv_files[file_index]
                 else:
                     print("Invalid file number.")
             elif choice == '2':
@@ -400,7 +402,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 self.create_playlist_from_selected_artists()
             elif choice == '4':
                 # Get user input for the file name to save the Spotify DataFrame
-                save_name = self.get_user_input_for_action("save file", self._loaded_csv_file)
+                save_name = self.get_user_input_for_action("save file", self.data_handler.loaded_csv_file)
                 self.data_handler.save_Spotify_Dataframe(save_name)
             elif choice == '5':
                 print("Exiting...")

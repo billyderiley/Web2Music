@@ -28,6 +28,23 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         else:
             self.data_handler = DataHandler()
 
+    def user_interaction_load_search_dataframe(self):
+        # List available CSV files and prompt user to select one
+        csv_files = self.data_handler.list_csv_files()
+        if not csv_files:
+            print("No CSV files found in the current directory.")
+        file_index = int(input("Enter the number of the CSV file to load: ")) - 1
+        if 0 <= file_index < len(csv_files):
+            """Load a CSV file into the Spotify Dataframe managed by DataHandler."""
+            # Load CSV file using DataHandler and set it as the Spotify Dataframe
+            search_df = self.data_handler.load_data(csv_files[file_index])
+            self.data_handler.set_search_dataframe(search_df)
+            self.data_handler.set_loaded_csv_file(csv_files[file_index])
+            print(f"Search DataFrame loaded from {csv_files[file_index]}")
+        else:
+            print("Invalid file number.")
+
+
 
     def start_up_search(self):
         self.current_url = self.start_url
@@ -64,10 +81,13 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         self.sort_by_dict = sort_by_dict
 
     def user_interaction(self):
+        # Initialize user input variable
         u_i = ''
+
+        # Mapping of user input to corresponding functions
         switch = {
             '1': self.user_interaction_add_filters,
-            '2': self.user_interaction_update_sort_by,  # Function for 'Update Sort By'
+            '2': self.user_interaction_update_sort_by,
             '3': self.user_interaction_display_dataframe,
             '4': self.user_interaction_release_dataframe_deep_search,
             '5': self.updateDataFrame,
@@ -75,26 +95,48 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             '7': self.user_interaction_select_pages,
             '8': self.user_interaction_view_applied_filters,
             '9': self.user_interaction_remove_filters,
-            '10': self.user_interaction_create_spotify_playlist  # Assuming you have a function for this
+            '10': self.user_interaction_create_spotify_playlist,
+            '11': self.user_interaction_load_search_dataframe  # New function for loading the search DataFrame
         }
+
+        # Main loop for user interaction
         while u_i != "Q":
-            print("1: Apply Filters Page \n"
-                  "2: Update Sort By \n"  # New option
-                  "3: Display DataFrame \n"
-                  "4: Do Release Info Deep Search \n"
-                  "5: Update DataFrame \n"
-                  "6: Save DataFrame to CSV \n"
-                  "7: Scrape Pages \n"
-                  "8: View Applied Filters \n"
-                  "9: Remove Applied Filters \n"
-                  "10: Create Spotify Playlist from Search Results \n")  # Adjusted option number
+            # Check if the Search DataFrame is loaded and display its status
+            if self.data_handler.Search_Dataframe is not None and not self.data_handler.Search_Dataframe.empty:
+                print("\n" + "=" * 30)
+                message = "Search DataFrame present."
+                # If a CSV file was used to load the DataFrame, display its name
+                if self.data_handler.loaded_csv_file:
+                    message += " (Loaded from: " + self.data_handler.loaded_csv_file + ")"
+                print(f"  {message}")
+                print("=" * 30)
+            else:
+                # Message when no Search DataFrame is loaded
+                print("\n" + "=" * 30)
+                print("  No Search DataFrame currently loaded.")
+                print("=" * 30)
+
+            # Display menu options to the user
+            print("1: Apply Filters Page\n"
+                  "2: Update Sort By\n"
+                  "3: Display DataFrame\n"
+                  "4: Do Release Info Deep Search\n"
+                  "5: Update DataFrame\n"
+                  "6: Save DataFrame to CSV\n"
+                  "7: Scrape Pages\n"
+                  "8: View Applied Filters\n"
+                  "9: Remove Applied Filters\n"
+                  "10: Create Spotify Playlist from Search Results\n"
+                  "11: Load Search DataFrame\n")  # Option for loading the search DataFrame
             u_i = input("Enter Q to Quit, or any other key to continue: ")
 
+            # Execute the function based on user input
             func = switch.get(u_i)
             if func:
                 func()
             else:
-                print('Invalid choice. Please enter a number between 1 and 9, or Q to quit.')
+                # Handle invalid choices
+                print('Invalid choice. Please enter a number between 1 and 11, or Q to quit.')
 
     def user_interaction_add_filters(self):
         if self.current_url == self.start_url:
@@ -243,7 +285,13 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]}")
 
     def user_interaction_release_dataframe_deep_search(self):
-        self.data_handler.transformSearchDf2ReleaseDf()
+        # initialize DiscogsReleaseScraper object with DataHandler instance
+        DiscogsReleaseScraper_obj = DiscogsReleaseScraper(data_handler=self.data_handler)
+        # If there is a search DataFrame available, set it as the DataHandler's Release DataFrame
+        if self.data_handler.Search_Dataframe is not None:
+            DiscogsReleaseScraper_obj.data_handler.set_release_dataframe(self.data_handler.Search_Dataframe)
+
+
 
 
         #max_rows = int(input("Enter the number of rows to fill in: "))
@@ -272,17 +320,17 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
     def user_interaction_create_spotify_playlist(self):
         # Initialize SpotifyPlaylistCreation with necessary Spotify credentials and DataHandler instance
-        spotify_api = SpotifyPlaylistCreation(client_id=client_id,
+        SpotifyPlaylistCreation_obj = SpotifyPlaylistCreation(client_id=client_id,
                                               client_secret=client_secret,
                                               redirect_uri=redirect_uri,
                                               data_handler=self.data_handler)
 
         # If there is a search DataFrame available, set it as the Spotify DataFrame in DataHandler
         if self.data_handler.Search_Dataframe is not None:
-            spotify_api.data_handler.set_spotify_dataframe(self.data_handler.Search_Dataframe)
+            SpotifyPlaylistCreation_obj.data_handler.set_spotify_dataframe(self.data_handler.Search_Dataframe)
 
         # Call the user menu of SpotifyPlaylistCreation for further actions
-        spotify_api.user_menu()
+        SpotifyPlaylistCreation_obj.user_menu()
 
     """def user_interaction_create_spotify_playlist_backup(self):
         spotify_api = SpotifyPlaylistCreation(client_id=client_id,
