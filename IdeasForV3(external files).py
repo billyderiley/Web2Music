@@ -4,7 +4,7 @@ from IdeasForV3 import DiscogsSearchScraper
 import os
 
 app = Flask(__name__)
-scraper = DiscogsSearchScraper("https://www.discogs.com/search")
+scraper = DiscogsSearchScraper("https://www.discogs.com/search/")
 
 # Simple token-based authentication
 API_TOKEN = os.environ.get("API_TOKEN", "your_default_token")
@@ -36,6 +36,49 @@ def start_scrape():
         return jsonify({"error": str(e)}), 500
 
 # Additional endpoints with token_required decorator
+
+
+
+
+
+
+import motor.motor_asyncio
+import asyncio
+from bson.json_util import dumps
+import json
+
+# Async MongoDB connection string from Atlas
+async_connection_string = "YOUR_MONGODB_ATLAS_CONNECTION_STRING"
+
+# Async connection to MongoDB Atlas
+async_client = motor.motor_asyncio.AsyncIOMotorClient(async_connection_string)
+
+# Access database
+async_db = async_client['your_database_name']  # Replace with your database name
+
+# Access collection
+async_collection = async_db['your_collection_name']  # Replace with your collection name
+
+# Async function to insert data into the collection
+async def async_insert_data(data):
+    await async_collection.insert_one(data)
+
+# Async function to query and fetch data from the collection
+async def async_fetch_data(query):
+    documents = []
+    async for document in async_collection.find(query):
+        documents.append(document)
+    return json.loads(dumps(documents))  # Converts BSON to JSON
+
+# Example usage of the async functions
+async def main():
+    await async_insert_data({'name': 'Jane Doe', 'email': 'jane@example.com'})
+    results = await async_fetch_data({'name': 'Jane Doe'})
+    print(results)
+
+# Run the async main function
+if __name__ == "__main__":
+    asyncio.run(main())
 
 if __name__ == '__main__':
     app.run(debug=True)

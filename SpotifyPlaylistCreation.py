@@ -3,9 +3,14 @@ import spotipy
 import pandas as pd
 import os
 import re
+from requests.exceptions import RequestException
+import time
 from ScrapeDataHandler import DataHandler
 from SpotifyScraper import SpotifyScraper
 from datetime import datetime
+from difflib import SequenceMatcher
+import Levenshtein as lv
+
 
 class SpotifyPlaylistCreation(SpotifyScraper):
     def __init__(self, client_id, client_secret, redirect_uri, data_handler):
@@ -38,11 +43,73 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             print(f"{idx}. {file}")
         return csv_files"""
 
-    def search_spotify(self, artist, title):
+    def search_spotify(self, artist, title, search_type='track', max_retries=2, delay=1):
+        if "," in artist:
+            artist = artist.split(",")[0]
+        query = f"artist:{artist} {search_type}:{title}"
+        print(f"Searching Spotify with query: {query}")  # Debugging info
+
+        retries = 0
+        while retries < max_retries:
+            try:
+                results = self.sp.search(q=query, type=search_type)
+                print(results)
+
+                items = results['tracks']['items'] if search_type == 'track' else results['albums']['items']
+
+                if not items:
+                    print(f"No {search_type}s found for query: {query}")  # Debugging info
+                    if search_type == 'track':
+                        print("Retrying search as album...")
+                        return self.search_spotify(artist, title, search_type='album', max_retries=max_retries,
+                                                   delay=delay)
+                    return None
+
+                return items
+            except spotipy.exceptions.SpotifyException as e:
+                if e.http_status == 429:  # Rate limiting
+                    retry_after = int(e.headers.get('Retry-After', 1))  # Default to 1 second if header is missing
+                    print(f"Rate limit reached. Retrying after {retry_after} seconds.")
+                    time.sleep(retry_after)
+                    continue  # Retry the request
+                else:
+                    print(f"Spotify API error for query {query}: {e}")
+                    return None
+            except RequestException as e:
+                retries += 1
+                if retries < max_retries:
+                    print(
+                        f"Network error encountered. Retrying in {delay} seconds... (Attempt {retries}/{max_retries})")
+                    time.sleep(delay)
+                else:
+                    print(f"Network error during Spotify search after {max_retries} attempts: {e}")
+                    return None
+            except Exception as e:
+                print(f"An unexpected error occurred: {e}")
+                return None
+
+    def process_spotify_search_result(self, search_result, search_type):
+        if search_type == 'track':
+            if search_result:
+                artist_id = search_result[0]['artists'][0]['id']  # Fetch artist ID from track
+                return artist_id
+            else:
+                return None
+        elif search_type == 'album':
+            if search_result:
+                artist_id = search_result[0]['artists'][0]['id']  # Fetch artist ID from album
+                return artist_id
+            else:
+                return None
+        else:
+            return None
+
+
+    """def search_spotify_backup(self, artist, title):
         query = f"artist:{artist} track:{title}"
         results = self.sp.search(q=query, type='track')
         tracks = results['tracks']['items']
-        return tracks if tracks else None
+        return tracks if tracks else None"""
 
 
 
@@ -79,55 +146,179 @@ class SpotifyPlaylistCreation(SpotifyScraper):
 
         self.create_playlist(playlist_name, list(track_uris))"""
 
-    def generate_playlist_from_dataframe(self,):
-        # Get user input for playlist name, with a suggestion based on the loaded CSV file
+    """def generate_playlist_from_dataframe(self):
         playlist_name = self.get_user_input_for_action("playlist", self.data_handler.loaded_csv_file)
-
-        # Initialize a list to maintain the order of track URIs and a set to check for duplicates
         track_uris_list = []
         track_uris_set = set()
 
-        # Iterate over each row in the DataFrame
         for _, row in self.data_handler.Spotify_Dataframe.iterrows():
             artist = row['Discogs_Artists']
             title = row['Discogs_Titles']
 
-            # Search for the top track on Spotify for the given artist and title
-            top_tracks = self.search_spotify(artist, title)
-
-            if top_tracks:
-                # Fetch the artist's information from Spotify using their ID
-                artist_id = top_tracks[0]['artists'][0]['id']
-                #artist_info = self.sp.artist(artist_id)
-
-                # Fetch artist metrics from Spotify
-                artist_metrics = self.get_artist_metrics(artist_id)
-                # Update the Spotify DataFrame with these metrics
-                self.data_handler.update_spotify_dataframe_with_artist_metrics(artist, artist_metrics)
-
-                # Get the album ID of the top track and fetch tracks of the album
-                album_id = top_tracks[0]['album']['id']
+            # First, try searching as an album
+            album_search_result = self.search_spotify(artist, title, search_type='album')
+            if album_search_result and 'album' in album_search_result[0]:
+                album_id = album_search_result[0]['id']
                 album_tracks = self.sp.album_tracks(album_id)['items']
+                tracks_to_add = album_tracks
+                artist_id = album_search_result[0]['artists'][0]['id']  # Get artist ID from the album
+            else:
+                # If album search fails, search as a track to get artist ID
+                track_search_result = self.search_spotify(artist, title, search_type='track')
+                if track_search_result:
+                    noted_artist_id = track_search_result[0]['artists'][0]['id']
 
-                # Iterate over the album's tracks
+
+
+                    # Search the original query as a track again
+                    top_track_search_result = self.search_spotify(artist, title, search_type='track')
+                    if top_track_search_result and top_track_search_result[0]['artists'][0]['id'] == noted_artist_id:
+                        top_track_id = top_track_search_result[0]['id']
+                        try:
+                            album_id = top_track_search_result[0]['album']['id']
+                            album_tracks = self.sp.album_tracks(album_id)['items']
+                            tracks_to_add = album_tracks
+
+                        except Exception as e:
+                            print(f"Error fetching album tracks: {e}")
+                            tracks_to_add = [top_track_search_result[0]]
+                    
+
+            # Add tracks to the playlist
+            for track in tracks_to_add:
+                if track['uri'] not in track_uris_set:
+                    track_uris_set.add(track['uri'])
+                    track_uris_list.append(track['uri'])
+                    print(f"Added track: {track['name']}")
+
+        # Create the playlist
+        if track_uris_list:
+            self.create_playlist(playlist_name, track_uris_list)
+        else:
+            print("No tracks to add to the playlist.")"""
+
+    def generate_playlist_from_dataframe(self):
+        playlist_name = self.get_user_input_for_action("playlist", self.data_handler.loaded_csv_file)
+        track_uris_list = []
+        track_uris_set = set()
+        #track_preview_urls = {}  # Dictionary to store preview urls
+
+        for _, row in self.data_handler.Spotify_Dataframe.iterrows():
+            track_preview_urls = [] # List to store preview urls
+            artist = row['Discogs_Artists']
+            title = row['Discogs_Titles']
+
+            # First, search for an album
+            album_search_result = self.search_spotify(artist, title, search_type='album')
+            if album_search_result:
+                album_id = album_search_result[0]['id']
+                album_tracks = self.sp.album_tracks(album_id)['items']
+                album_name = album_search_result[0]['name']
+            else:
+                # If no album found, search for a track
+                track_search_result = self.search_spotify(artist, title, search_type='track')
+                if track_search_result:
+                    album_id = track_search_result[0]['album']['id']
+                    album_tracks = self.sp.album_tracks(album_id)['items']
+                    album_name = track_search_result[0]['album']['name']
+                else:
+                    # If no track found, continue to the next row in DataFrame
+                    continue
+
+            # CHECK THE ALBUM NAME AGAINST THE TITLE
+            if album_name.lower() != title.lower():
+                print(f"Album name '{album_name}' does not match title exactly '{title}'.")
+                #continue
+                #CHECK ALBUM NAME AGAINST TITLE FOR SIMILARITY
+                if self.similarity(album_name.lower(), title.lower()) < 0.6:
+                    print(f"Album name '{album_name}' does not match title by 60% '{title}'.")
+                    # check if album_name is in title or vice versa
+                    if album_name.lower() in title.lower() or title.lower() in album_name.lower():
+                        print("but the album name is in the title or vice versa")
+                        if artist.lower() == 'various':
+                            print("but the artist is various")
+                            continue
+                        else:
+                            pass
+                    else:
+                        continue
+
+            # Add tracks to the playlist
+            for track in album_tracks:
+                # Append the preview URL to the list
+                preview_url = track.get('preview_url', None)
+                track_preview_urls.append(preview_url)
+                if track['uri'] not in track_uris_set:
+                    track_uris_set.add(track['uri'])
+                    track_uris_list.append(track['uri'])
+                    print(f"Added track: {track['name']}")
+                    #track_preview_urls[track['uri']] = track.get('preview_url', None)
+
+            # Update the DataFrame with preview URLs for this row
+            self.data_handler.update_spotify_dataframe_with_preview_urls(row, track_preview_urls)
+
+        if track_uris_list:
+            self.create_playlist(playlist_name, track_uris_list)
+        else:
+            print("No tracks to add to the playlist.")
+
+
+
+    def similarity(self, str1, str2):
+        if str1 is None or str2 is None:
+            return 0  # Return 0 similarity if either string is None
+        return lv.ratio(str(str1).lower(), str(str2).lower())
+
+    """def generate_playlist_from_dataframe(self):
+        playlist_name = self.get_user_input_for_action("playlist", self.data_handler.loaded_csv_file)
+        track_uris_list = []
+        track_uris_set = set()
+
+        for _, row in self.data_handler.Spotify_Dataframe.iterrows():
+            artist = row['Discogs_Artists']
+            title = row['Discogs_Titles']
+
+            # First, try searching as an album
+            album_search_result = self.search_spotify(artist, title, search_type='album')
+            print("Album search result:", album_search_result)  # Debugging print
+            if album_search_result and 'album' in album_search_result[0]:
+                album_id = album_search_result[0]['id']
+                album_tracks = self.sp.album_tracks(album_id)['items']
                 for track in album_tracks:
-                    # Check if the track URI is not already in the set (to avoid duplicates)
                     if track['uri'] not in track_uris_set:
-                        # Concatenate artist names (for tracks with multiple artists)
-                        artist_names = ', '.join(artist['name'] for artist in track['artists'])
-
-                        # Print the found track information
-                        print(f"Found track: {artist_names} - {track['name']}")
-
-                        # Add the track URI to the set and list
                         track_uris_set.add(track['uri'])
                         track_uris_list.append(track['uri'])
-                    else:
-                        # Handle the case where a duplicate track is found
-                        print(f"Duplicate track found: {track['name']}")
+                        print(f"Added track from album: {track['name']}")
+                    noted_artist_id = album_search_result[0]['artists'][0]['id']
+            else:
+                # If album search fails, search as a track
+                print("No album found, searching for track...")  # Debugging print
+                track_search_result = self.search_spotify(artist, title, search_type='track')
+                print("Track search result:", track_search_result)  # Debugging print
+                if track_search_result:
+                    # Process each track in the search result
+                    for track in track_search_result:
+                        if 'track' in track['uri']:  # Validate it's a track URI
+                            if track['uri'] not in track_uris_set:
+                                track_uris_set.add(track['uri'])
+                                track_uris_list.append(track['uri'])
+                                print(f"Added track: {track['name']}")
+                            else:
+                                print("Invalid track URI:", track['uri'])  # Debugging print
+                        if track['uri'] not in track_uris_set:
+                            track_uris_set.add(track['uri'])
+                            track_uris_list.append(track['uri'])
+                            print(f"Added individual track: {track['name']}")
+                    noted_artist_id = track_search_result[0]['artists'][0]['id']
 
-        # Create the playlist with the collected track URIs
-        self.create_playlist(playlist_name, track_uris_list)
+        # Create the playlist
+        # Update artist metrics if there are tracks to add
+        if track_uris_list and noted_artist_id:
+            artist_metrics = self.get_artist_metrics(noted_artist_id)
+            self.data_handler.update_spotify_dataframe_with_artist_metrics(artist, artist_metrics)
+            self.create_playlist(playlist_name, track_uris_list)
+        else:
+            print("No tracks to add to the playlist.")"""
 
     def generate_single_track_playlist_from_dataframe(self):
         """Generate a playlist with single tracks from the loaded Spotify DataFrame."""
@@ -155,7 +346,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         # Create the playlist with the collected track URIs
         self.create_playlist(playlist_name, track_uris)
 
-    def create_playlist_from_selected_artists(self):
+    def generate_playlist_from_selected_artists(self):
         """Create a playlist from selected artists in the loaded Spotify DataFrame."""
         # Ensure the Spotify DataFrame is loaded
         if self.data_handler.Spotify_Dataframe is None:
@@ -183,6 +374,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             for title in titles:
                 print(f"Searching top track for {artist} - {title}...")
                 top_tracks = self.search_spotify(artist, title)
+                print(top_tracks)
 
                 if top_tracks:
                     # Fetch artist metrics and update the DataFrame
@@ -399,7 +591,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 self.generate_playlist_from_dataframe()
             elif choice == '3':
                 # Create a playlist from selected artists within the loaded Spotify DataFrame
-                self.create_playlist_from_selected_artists()
+                self.generate_playlist_from_selected_artists()
             elif choice == '4':
                 # Get user input for the file name to save the Spotify DataFrame
                 save_name = self.get_user_input_for_action("save file", self.data_handler.loaded_csv_file)

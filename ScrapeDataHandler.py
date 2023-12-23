@@ -55,6 +55,14 @@ class DataHandler:
         self.Spotify_Dataframe.loc[self.Spotify_Dataframe[
                                        'Discogs_Artists'] == artist, 'Spotify_Popularity_Followers'] = f"{popularity}, {followers}, {current_time}"
 
+    def update_spotify_dataframe_with_preview_urls(self, row, preview_urls):
+        preview_urls_str = ', '.join(filter(None, preview_urls))  # Concatenate non-None URLs
+
+        if 'Preview_URLs' not in self.Spotify_Dataframe.columns:
+            self.Spotify_Dataframe['Preview_URLs'] = None
+
+        # Update the DataFrame with the concatenated preview URLs
+        self.Spotify_Dataframe.at[row.name, 'Preview_URLs'] = preview_urls_str
 
     """def display_dataframe(self):
         if self.Search_Dataframe is not None:
