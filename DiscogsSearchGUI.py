@@ -3,6 +3,7 @@ from DiscogsReleaseScraper import DiscogsReleaseScraper
 from ScrapeDataHandler import DataHandler
 from SpotifyPlaylistCreation import SpotifyPlaylistCreation
 import time
+
 import re
 
 client_id = '2ea9899462614265a2b26b43c68cf72a'
@@ -39,7 +40,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             # Load CSV file using DataHandler and set it as the Spotify Dataframe
             search_df = self.data_handler.load_data(csv_files[file_index])
             self.data_handler.set_search_dataframe(search_df)
-            self.data_handler.set_loaded_csv_file(csv_files[file_index])
+            self.data_handler.set_loaded_search_csv_file(csv_files[file_index])
             print(f"Search DataFrame loaded from {csv_files[file_index]}")
         else:
             print("Invalid file number.")
@@ -48,14 +49,15 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
     def start_up_search(self):
         self.current_url = self.start_url
-        self.navigate_to_search_url(self.current_url)
+        print(self.current_url)
+        self.navigate_to_search_url(self.current_url, update_dataframes=False)
         # self.updateAppliedFilters(applied_filters=self.getAppliedFiltersFromUrl(self.current_url))
         # self.fetchCurrentSearchPageContent()
         # self.aside_navbar_content, self.center_releases_content, __applied_filters, __new_applied_filters_list \
         #    = self.get_current_search_page_content()
         # self.updateSearchOptions()
 
-    def navigate_to_search_url(self, url):
+    def navigate_to_search_url(self, url, update_dataframes=True):
         self.current_url = url
         self.updateAppliedFilters(applied_filters=self.getAppliedFiltersFromUrl(self.current_url))
         #self.aside_navbar_content, self.center_releases_content, __applied_filters, __new_applied_filters_list = self.get_current_search_page_content()
@@ -63,6 +65,9 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         self.updateSearchOptions(aside_navbar_content=self.search_url_content_dict['aside_navbar_content'])
         self.updateCenterReleasesContent(self.search_url_content_dict['center_releases_content'])
         self.updateSortByDict(self.search_url_content_dict['sort_by_dict'])
+        if update_dataframes is True:
+            self.updateDataFrame()
+
         # self.updateCurrentPageAndNextPage()
         # self.fetchCurrentSearchPageContent()
 
@@ -73,8 +78,6 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         self.center_releases_content = center_releases_content
 
     def updateDataFrame(self):
-        if self.center_releases_content is not None:
-            print("Possible to update dataframe with content...")
         self.data_handler.update_search_dataframe(self.center_releases_content)
 
     def updateSortByDict(self, sort_by_dict):
@@ -96,7 +99,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             '8': self.user_interaction_view_applied_filters,
             '9': self.user_interaction_remove_filters,
             '10': self.user_interaction_create_spotify_playlist,
-            '11': self.user_interaction_load_search_dataframe  # New function for loading the search DataFrame
+            '11': self.user_interaction_load_search_dataframe,  # New function for loading the search DataFrame
+            '12': self.user_interaction_reload_all_webpages  # New method for reloading webpages
         }
 
         # Main loop for user interaction
@@ -106,8 +110,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
                 print("\n" + "=" * 30)
                 message = "Search DataFrame present."
                 # If a CSV file was used to load the DataFrame, display its name
-                if self.data_handler.loaded_csv_file:
-                    message += " (Loaded from: " + self.data_handler.loaded_csv_file + ")"
+                if self.data_handler.loaded_search_csv_file:
+                    message += " (Loaded from: " + self.data_handler.loaded_search_csv_file + ")"
                 print(f"  {message}")
                 print("=" * 30)
             else:
@@ -127,7 +131,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
                   "8: View Applied Filters\n"
                   "9: Remove Applied Filters\n"
                   "10: Create Spotify Playlist from Search Results\n"
-                  "11: Load Search DataFrame\n")  # Option for loading the search DataFrame
+                  "11: Load Search DataFrame\n"
+                  "12: Reload Search Pages\n")
             u_i = input("Enter Q to Quit, or any other key to continue: ")
 
             # Execute the function based on user input
@@ -140,7 +145,9 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
     def user_interaction_add_filters(self):
         if self.current_url == self.start_url:
+            #print(self.current_url)
             self.start_up_search()
+
         print(
             f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]} ")
         print([f"{i}: {label_type}" for i, label_type in enumerate(self.search_dict_get_label_type_keys(), 1)])
@@ -270,15 +277,16 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
     def user_interaction_select_pages(self, update_applied_filters=False):
         # self.current_url
-        enter_key3 = input("Enter a page number, or range (number seperated by a space)")
-        search_pages = self.get_page_range(self.current_url, enter_key3)
-        for search_page_url in search_pages:
+        page_number_input = input("Enter a page number, or range (number seperated by a space)")
+        search_pages = self.get_page_range(self.current_url, page_number_input)
+        # Use execute_in_batches to process each URL in search_pages
+        self.execute_in_batches(urls=search_pages, action=self.navigate_to_search_url)
+
+        """for search_page_url in search_pages:
             time.sleep(0.5)
             print(f"Navigating to : \n {search_page_url}")
             self.navigate_to_search_url(search_page_url)
-            self.updateDataFrame()
-
-    # self.addAppliedFilter(pages_filter_term)
+            self.updateDataFrame()"""
 
     def user_interaction_view_applied_filters(self):
         print(
@@ -331,6 +339,12 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
         # Call the user menu of SpotifyPlaylistCreation for further actions
         SpotifyPlaylistCreation_obj.user_menu()
+
+
+    def user_interaction_reload_all_webpages(self):
+        print("Reloading all webpages. This might take some time...")
+        self.reload_all_webpages(batch_size=5)  # You can adjust the batch size
+        print("All webpages reloaded successfully.")
 
     """def user_interaction_create_spotify_playlist_backup(self):
         spotify_api = SpotifyPlaylistCreation(client_id=client_id,

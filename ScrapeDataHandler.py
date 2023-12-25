@@ -22,11 +22,13 @@ class DataHandler:
         for idx, file in enumerate(csv_files, 1):
             print(f"{idx}. {file}")
         return csv_files
-    def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None, loaded_csv_file = None):
+    def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None,
+                 loaded_search_csv_file = None,  loaded_spotify_csv_file = None):
         self.Search_Dataframe = Search_Dataframe
         self.Release_Dataframe = Release_Dataframe
         self.Spotify_Dataframe = Spotify_Dataframe
-        self.loaded_csv_file = loaded_csv_file
+        self.loaded_search_csv_file = loaded_search_csv_file
+        self.loaded_spotify_csv_file = loaded_spotify_csv_file
 
     def set_spotify_dataframe(self, df):
         """Set the Spotify DataFrame."""
@@ -40,9 +42,45 @@ class DataHandler:
         """Set the Release DataFrame."""
         self.Release_Dataframe = df
 
-    def set_loaded_csv_file(self, csv_file):
+    def set_loaded_search_csv_file(self, csv_file):
         """Set the loaded CSV file."""
-        self.loaded_csv_file = csv_file
+        self.loaded_search_csv_file = csv_file
+
+    def set_loaded_spotify_csv_file(self, csv_file):
+        """Set the loaded CSV file."""
+        self.loaded_spotify_csv_file = csv_file
+
+    def update_spotify_dataframe_with_metadata(self, metadata_dict_list):
+        # Check if a Spotify DataFrame exists and if not, create one
+        if self.Spotify_Dataframe is None:
+            self.Spotify_Dataframe = pd.DataFrame()
+
+        # Define the columns to check for duplicates
+        check_columns = ['Spotify_ID', 'Spotify_Name', 'Spotify_Album', 'Spotify_Artist', 'Spotify_Duration']
+
+        # Create a DataFrame from the list of metadata dictionaries
+        new_rows_df = pd.DataFrame(metadata_dict_list)
+
+        # Filter out rows that already exist in Spotify_Dataframe
+        filtered_new_rows_df = new_rows_df[~new_rows_df.apply(
+            lambda row: self.row_exists_in_spotify_df(row, check_columns), axis=1
+        )]
+
+        # Concatenate the new rows with the existing DataFrame
+        self.Spotify_Dataframe = pd.concat([self.Spotify_Dataframe, filtered_new_rows_df], ignore_index=True)
+
+    def row_exists_in_spotify_df(self, row, check_columns):
+        if self.Spotify_Dataframe.empty:
+            return False
+
+        # Check each row in Spotify_Dataframe for a match
+        for _, existing_row in self.Spotify_Dataframe.iterrows():
+            if all(existing_row[col] == row[col] for col in check_columns if col in row):
+                return True
+
+        return False
+
+
 
     def update_spotify_dataframe_with_artist_metrics(self, artist, artist_metrics):
         """Update the Spotify DataFrame with artist's Spotify popularity and followers."""
@@ -101,9 +139,13 @@ class DataHandler:
     def save_Spotify_Dataframe(self, path):
         """Save the Spotify DataFrame to a CSV file."""
         # Ensure the file name ends with .csv
+
+        if 'SpotifyDataframe' not in path:
+            # a str representation of the current date
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            path = path+'_SpotifyDataframe_' +current_date
         if not path.endswith('.csv'):
             path += '.csv'
-
         # Check if the Spotify DataFrame is not empty
         if self.Spotify_Dataframe is not None:
             # Save the DataFrame to the specified path

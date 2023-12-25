@@ -6,7 +6,9 @@ import re
 from requests.exceptions import RequestException
 import time
 from ScrapeDataHandler import DataHandler
+import pygame
 from SpotifyScraper import SpotifyScraper
+from Audio import SpotifyPreviewPlayer
 from datetime import datetime
 from difflib import SequenceMatcher
 import Levenshtein as lv
@@ -23,13 +25,22 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         #self.df = None
         #self._loaded_csv_file = None
 
+
     def load_spotify_dataframe(self, csv_file):
         """Load a CSV file into the Spotify Dataframe managed by DataHandler."""
         # Load CSV file using DataHandler and set it as the Spotify Dataframe
         spotify_df = self.data_handler.load_data(csv_file)
         self.data_handler.set_spotify_dataframe(spotify_df)
-        self.data_handler.set_loaded_csv_file(csv_file)
+        self.data_handler.set_loaded_spotify_csv_file(csv_file)
         print(f"Spotify DataFrame loaded from {csv_file}")
+
+    def load_search_dataframe(self, csv_file):
+        """Load a CSV file into the Spotify Dataframe managed by DataHandler."""
+        # Load CSV file using DataHandler and set it as the Spotify Dataframe
+        discogs_df = self.data_handler.load_data(csv_file)
+        self.data_handler.set_search_dataframe(discogs_df)
+        self.data_handler.set_loaded_search_csv_file(csv_file)
+        print(f"Search DataFrame loaded from {csv_file}")
 
     """def load_data(self, csv_file):
         self.df = pd.read_csv(csv_file)
@@ -53,14 +64,14 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         while retries < max_retries:
             try:
                 results = self.sp.search(q=query, type=search_type)
-                print(results)
+                #print(results)
 
                 items = results['tracks']['items'] if search_type == 'track' else results['albums']['items']
 
                 if not items:
-                    print(f"No {search_type}s found for query: {query}")  # Debugging info
+                    #print(f"No {search_type}s found for query: {query}")  # Debugging info
                     if search_type == 'track':
-                        print("Retrying search as album...")
+                        #print("Retrying search as album...")
                         return self.search_spotify(artist, title, search_type='album', max_retries=max_retries,
                                                    delay=delay)
                     return None
@@ -197,13 +208,18 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         else:
             print("No tracks to add to the playlist.")"""
 
-    def generate_playlist_from_dataframe(self):
-        playlist_name = self.get_user_input_for_action("playlist", self.data_handler.loaded_csv_file)
+    def generate_playlist_from_dataframe(self, dataframe, create_playlist=True):
+        playlist_name = self.get_user_input_for_action("playlist",
+                                                       self.data_handler.loaded_search_csv_file
+                                                       if self.data_handler.loaded_search_csv_file
+                                                       else self.data_handler.loaded_spotify_csv_file)
         track_uris_list = []
         track_uris_set = set()
+        track_metadata_list = []
         #track_preview_urls = {}  # Dictionary to store preview urls
 
-        for _, row in self.data_handler.Spotify_Dataframe.iterrows():
+       # for _, row in self.data_handler.Spotify_Dataframe.iterrows():
+        for _, row in dataframe.iterrows():
             track_preview_urls = [] # List to store preview urls
             artist = row['Discogs_Artists']
             title = row['Discogs_Titles']
@@ -214,6 +230,8 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 album_id = album_search_result[0]['id']
                 album_tracks = self.sp.album_tracks(album_id)['items']
                 album_name = album_search_result[0]['name']
+                album_release_date = album_search_result[0]['release_date']
+
             else:
                 # If no album found, search for a track
                 track_search_result = self.search_spotify(artist, title, search_type='track')
@@ -221,22 +239,22 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                     album_id = track_search_result[0]['album']['id']
                     album_tracks = self.sp.album_tracks(album_id)['items']
                     album_name = track_search_result[0]['album']['name']
+                    album_release_date = track_search_result[0]['album']['release_date']
                 else:
                     # If no track found, continue to the next row in DataFrame
                     continue
-
             # CHECK THE ALBUM NAME AGAINST THE TITLE
             if album_name.lower() != title.lower():
-                print(f"Album name '{album_name}' does not match title exactly '{title}'.")
+                #print(f"Album name '{album_name}' does not match title exactly '{title}'.")
                 #continue
                 #CHECK ALBUM NAME AGAINST TITLE FOR SIMILARITY
                 if self.similarity(album_name.lower(), title.lower()) < 0.6:
-                    print(f"Album name '{album_name}' does not match title by 60% '{title}'.")
+                    #print(f"Album name '{album_name}' does not match title by 60% '{title}'.")
                     # check if album_name is in title or vice versa
                     if album_name.lower() in title.lower() or title.lower() in album_name.lower():
-                        print("but the album name is in the title or vice versa")
+                        #print("but the album name is in the title or vice versa")
                         if artist.lower() == 'various':
-                            print("but the artist is various")
+                            #print("but the artist is various")
                             continue
                         else:
                             pass
@@ -247,20 +265,28 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             for track in album_tracks:
                 # Append the preview URL to the list
                 preview_url = track.get('preview_url', None)
-                track_preview_urls.append(preview_url)
+                #track_preview_urls.append(preview_url)
+
                 if track['uri'] not in track_uris_set:
                     track_uris_set.add(track['uri'])
                     track_uris_list.append(track['uri'])
-                    print(f"Added track: {track['name']}")
+                    track_metadata_list.append(self.get_spotify_metadata_from_track(track, album_name, album_release_date))
+                   # self.data_handler.update_spotify_dataframe_with_metadata(self.get_spotify_metadata_from_track(track))
+                    #print(f"Added track: {track['name']}")
+
                     #track_preview_urls[track['uri']] = track.get('preview_url', None)
 
             # Update the DataFrame with preview URLs for this row
-            self.data_handler.update_spotify_dataframe_with_preview_urls(row, track_preview_urls)
+           # self.data_handler.update_spotify_dataframe_with_preview_urls(row, track_preview_urls)
 
         if track_uris_list:
-            self.create_playlist(playlist_name, track_uris_list)
+            if create_playlist:
+                self.create_playlist(playlist_name, track_uris_list)
+            self.data_handler.update_spotify_dataframe_with_metadata(track_metadata_list)
+            self.data_handler.save_Spotify_Dataframe(self.data_handler.loaded_search_csv_file)
         else:
             print("No tracks to add to the playlist.")
+
 
 
 
@@ -374,7 +400,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             for title in titles:
                 print(f"Searching top track for {artist} - {title}...")
                 top_tracks = self.search_spotify(artist, title)
-                print(top_tracks)
+                #print(top_tracks)
 
                 if top_tracks:
                     # Fetch artist metrics and update the DataFrame
@@ -549,11 +575,103 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         return results['tracks']['items']
 
     def user_menu(self):
+        preview_player = SpotifyPreviewPlayer()  # Create an instance of SpotifyPreviewPlayer
+
+        while True:
+            self.display_dataframe_status()
+
+            print("Spotify Playlist Creator Menu")
+            print("1. Load Search CSV file")
+            print("2. Load Spotify CSV file")  # New option for loading Spotify DataFrame
+            print("3. Create a playlist from DataFrame")
+            print("4. Create a playlist from selected artists")
+            print("5. Save Spotify DataFrame to CSV")
+            print("6. Exit")
+            print("7. Get Spotify Metadata from DataFrame")  # Adjusted option number
+            print("8. Play Previews")  # New menu item for playing previews
+            choice = input("Enter your choice: ")
+
+            if choice == '1':
+                self.data_handler.set_search_dataframe(self.handle_load_search_csv())
+            elif choice == '2':
+                self.data_handler.set_spotify_dataframe(
+                    self.handle_load_spotify_csv())  # New method to handle Spotify CSV loading
+            elif choice in ['3', '4'] and self.is_dataframe_loaded():
+                self.handle_playlist_creation(choice)
+            elif choice == '5':
+                self.handle_save_spotify_csv()
+            elif choice == '6':
+                print("Exiting...")
+            elif choice == '7':
+                self.generate_playlist_from_dataframe(self.data_handler.Search_Dataframe, create_playlist=False)
+            elif choice == '8':
+                self.play_previews(preview_player)
+            else:
+                print("Invalid choice, please enter a number between 1 and 7.")
+
+    def handle_load_spotify_csv(self):
+        csv_files = self.data_handler.list_csv_files()
+        if not csv_files:
+            print("No CSV files found in the current directory.")
+            return
+
+        csv_files = [file for file in csv_files if "SpotifyDataframe" in file]
+
+        print("Available Spotify CSV Files:")
+        for i, file in enumerate(csv_files, 1):
+            print(f"{i}. {file}")
+
+        file_index = int(input("Enter the number of the Spotify CSV file to load: ")) - 1
+        if 0 <= file_index < len(csv_files):
+            print(csv_files[file_index])
+            df = self.data_handler.load_data(csv_files[file_index])
+            self.data_handler.set_spotify_dataframe(df)
+        else:
+            print("Invalid file number.")
+    def display_dataframe_status(self):
+        print("\n" + "=" * 30)
+        if self.is_dataframe_loaded():
+            message = f"DataFrame present (Loaded)"
+        else:
+            message = "No DataFrame currently loaded."
+        print(f"  {message}\n" + "=" * 30)
+
+    def is_dataframe_loaded(self):
+        return self.data_handler.Search_Dataframe is not None and not self.data_handler.Search_Dataframe.empty and self.data_handler.Spotify_Dataframe is not None and not self.data_handler.Spotify_Dataframe.empty
+
+    def handle_load_search_csv(self):
+        csv_files = self.data_handler.list_csv_files()
+        if not csv_files:
+            print("No CSV files found.")
+            return
+        return self.prompt_user_to_load_csv(csv_files)
+
+    def prompt_user_to_load_csv(self, csv_files):
+        for index, file in enumerate(csv_files, start=1):
+            print(f"{index}. {file}")
+        file_index = int(input("Enter the number of the CSV file to load: ")) - 1
+        if 0 <= file_index < len(csv_files):
+            df = self.data_handler.load_data(csv_files[file_index])
+            self.data_handler.set_loaded_search_csv_file(csv_files[file_index])
+            return df
+
+
+    def handle_playlist_creation(self, choice):
+        if choice == '2':
+            self.generate_playlist_from_dataframe(self.data_handler.Search_Dataframe)
+        elif choice == '3':
+            self.create_playlist_from_selected_artists(self.data_handler.Search_Dataframe)
+
+    def handle_save_spotify_csv(self):
+        save_name = self.get_user_input_for_action("save file", self.data_handler.loaded_csv_file)
+        self.data_handler.save_Spotify_Dataframe(save_name)
+
+    """def user_menu(self):
         while True:
             # Check if the Spotify DataFrame is present and display an appropriate message
-            if self.data_handler.Spotify_Dataframe is not None and not self.data_handler.Spotify_Dataframe.empty:
+            if self.data_handler.Search_Dataframe is not None and not self.data_handler.Search_Dataframe.empty:
                 print("\n" + "=" * 30)
-                message = "Spotify DataFrame present\n."
+                message = "Search DataFrame present\n."
                 if self.data_handler.loaded_csv_file:
                     message += " (Loaded from: " + self.data_handler.loaded_csv_file + ")"
                 print(f"  {message}")
@@ -564,7 +682,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 print("=" * 30)
 
             print("Spotify Playlist Creator Menu")
-            print("1. Load CSV file")
+            print("1. Load Search CSV file")
             print("2. Create a playlist from the entire DataFrame")
             print("3. Create a playlist from selected artists")
             print("4. Save Spotify DataFrame to CSV")
@@ -581,8 +699,8 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 file_index = int(input("Enter the number of the CSV file to load: ")) - 1
                 if 0 <= file_index < len(csv_files):
                     # Load the selected CSV file into the Spotify DataFrame
-                    self.load_spotify_dataframe(csv_files[file_index])
-                    self.data_handler.set_loaded_csv_file(csv_files[file_index])
+                    self.load_search_dataframe(csv_files[file_index])
+                    self.data_handler.set_loaded_search_csv_file(csv_files[file_index])
                     #self.data_handler.loaded_csv_file = csv_files[file_index]
                 else:
                     print("Invalid file number.")
@@ -600,7 +718,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 print("Exiting...")
                 break
             else:
-                print("Invalid choice, please enter a number between 1 and 5.")
+                print("Invalid choice, please enter a number between 1 and 5.")"""
 
 
     def normalize_track_name(self, name):
@@ -650,6 +768,38 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             return user_input
         else:
             return default_name
+
+    def play_previews(self, preview_player):
+        if self.data_handler.Spotify_Dataframe.empty:
+            print("Spotify DataFrame is empty. Load a DataFrame first.")
+            return
+
+        # Extract preview URLs from the DataFrame
+        preview_urls = self.data_handler.Spotify_Dataframe['Spotify_Preview_Url'].tolist()
+
+        current_index = 0
+        while True:
+            # Handle user input for navigation
+            print(
+                "Playing preview. Press 'forward' for next, 'backward' for previous, 'space' to pause/play, 'enter' to quit.")
+            user_input = input()
+
+            if user_input.lower() == 'forward':
+                current_index = (current_index + 1) % len(preview_urls)
+            elif user_input.lower() == 'backward':
+                current_index = (current_index - 1) % len(preview_urls)
+            elif user_input.lower() == 'space':
+                pygame.mixer.music.pause() if pygame.mixer.music.get_busy() else pygame.mixer.music.unpause()
+                continue
+            elif user_input.lower() == 'enter':
+                break
+
+            # Play the selected preview
+            preview_player.play_spotify_preview(preview_urls[current_index])
+
+        print("Exiting Preview Player.")
+
+
 
     """def get_user_input_playlist_name(self, suggestion: str = None):
         suggestions = []

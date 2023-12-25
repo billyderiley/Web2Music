@@ -204,12 +204,12 @@ class DiscogsSearchScraper(BaseScraper):
             options = sort_by.find_all('option')
             for option in options:
                 if option.get('selected'):
-                    print("no here")
+                    #print("no here")
                     sort_by_dict['Selected'][option.text] = option['value']
                 else:
-                    print('here')
+                    #print('here')
                     sort_by_dict['Options'][option.text] = option['value']
-        print(sort_by_dict)
+        #print(sort_by_dict)
         return sort_by_dict
 
     def getDiscogsUrl(self,href):
@@ -257,6 +257,28 @@ class DiscogsSearchScraper(BaseScraper):
         return current_page
 
     def create_url_from_page_number(self, url, page_number):
+        # Remove 'page=' and any digits following it
+        url = re.sub(r'page=\d+', '', url)
+
+        # If the URL ends with a digit, remove all trailing digits
+        if re.search(r'\d+$', url):
+            url = re.sub(r'\d+$', '', url)
+
+        # Determine the separator based on the existing structure of the URL
+        if url.endswith('/'):
+            new_page_url = url + "?page=" + str(page_number)
+        elif url.endswith('&'):
+            new_page_url = url + "page=" + str(page_number)
+        elif url.endswith('?'):
+            new_page_url = url + "page=" + str(page_number)
+        else:
+            # Ensure the URL ends with either '?' or '&' before appending the page number
+            separator = '&' if '?' in url else '?'
+            new_page_url = url + separator + "page=" + str(page_number)
+
+        return new_page_url
+
+    """def create_url_from_page_number(self, url, page_number):
         if "page=" in url:
             stripped_page_url, current_page_number = url.split('page=')[0], url.split('page=')[-1]
             new_page_url = stripped_page_url+page_number
@@ -267,7 +289,7 @@ class DiscogsSearchScraper(BaseScraper):
                 new_page_url = url + "page=" + page_number
             else:
                 new_page_url = url + "&page=" + page_number
-        return new_page_url
+        return new_page_url"""
 
     def search_dict_get(self):
         return self.search_options_dict
