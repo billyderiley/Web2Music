@@ -2,6 +2,7 @@ from DiscogsSearchScraper import DiscogsSearchScraper
 from DiscogsReleaseScraper import DiscogsReleaseScraper
 from ScrapeDataHandler import DataHandler
 from SpotifyPlaylistCreation import SpotifyPlaylistCreation
+from DataframeFilter import DataframeFilter
 import time
 
 import re
@@ -100,7 +101,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             '9': self.user_interaction_remove_filters,
             '10': self.user_interaction_create_spotify_playlist,
             '11': self.user_interaction_load_search_dataframe,  # New function for loading the search DataFrame
-            '12': self.user_interaction_reload_all_webpages  # New method for reloading webpages
+            '12': self.user_interaction_reload_all_webpages,  # New method for reloading webpages
+            '13': self.user_interaction_filter_dataframe
         }
 
         # Main loop for user interaction
@@ -132,7 +134,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
                   "9: Remove Applied Filters\n"
                   "10: Create Spotify Playlist from Search Results\n"
                   "11: Load Search DataFrame\n"
-                  "12: Reload Search Pages\n")
+                  "12: Reload Search Pages\n"
+                  "13: Filter DataFrame\n")
             u_i = input("Enter Q to Quit, or any other key to continue: ")
 
             # Execute the function based on user input
@@ -277,8 +280,14 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
     def user_interaction_select_pages(self, update_applied_filters=False):
         # self.current_url
+        results_per_page = self.get_results_per_search_page(self.current_url)
+        number_of_search_pages = self.get_number_of_search_pages(self.current_url)
+        max_page_number = int(number_of_search_pages.split(' ')[-1].replace(",", "")) // int(results_per_page)+1
+        print(f"Results per page is {results_per_page}")
+        print(f"Number of results you can search is {number_of_search_pages}")
+        print(f"You can search up to page {max_page_number}")
         page_number_input = input("Enter a page number, or range (number seperated by a space)")
-        search_pages = self.get_page_range(self.current_url, page_number_input)
+        search_pages = self.get_page_range(self.current_url, page_number_input, max_page_number)
         # Use execute_in_batches to process each URL in search_pages
         self.execute_in_batches(urls=search_pages, action=self.navigate_to_search_url)
 
@@ -293,11 +302,29 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]}")
 
     def user_interaction_release_dataframe_deep_search(self):
+        if self.data_handler.Search_Dataframe is None:
+            print("No Search DataFrame loaded.")
+            return
+
         # initialize DiscogsReleaseScraper object with DataHandler instance
-        DiscogsReleaseScraper_obj = DiscogsReleaseScraper(data_handler=self.data_handler)
-        # If there is a search DataFrame available, set it as the DataHandler's Release DataFrame
-        if self.data_handler.Search_Dataframe is not None:
-            DiscogsReleaseScraper_obj.data_handler.set_release_dataframe(self.data_handler.Search_Dataframe)
+        self.data_handler.get_release_dataframe_from_search_dataframe()
+        self.data_handler.save_Release_Dataframe(path=self.data_handler.loaded_search_csv_file)
+
+    def user_interaction_filter_dataframe(self):
+        #path = '/Users/Billy/Documents/Documents – Billy’s MacBook Pro (2)/Projects/Web2Music/HardcoreReggaeton.csv_ReleaseDataframe.csv'
+        #self.data_handler.set_release_dataframe(self.data_handler.load_data(path))
+        #self.data_handler.l
+        # Display columns and get user choice
+       # if self.data_handler.Release_Dataframe is None:
+        #    print("No Release DataFrame loaded.")
+        #    return
+        dataframe = self.data_handler.Search_Dataframe
+        DataframeFilter_obj = DataframeFilter(dataframe=dataframe)
+        DataframeFilter_obj.user_interaction_filter()
+        self.data_handler.set_release_dataframe(DataframeFilter_obj.filtered_dataframe)
+        self.data_handler.set_search_dataframe(DataframeFilter_obj.filtered_dataframe)
+
+
 
 
 
@@ -312,7 +339,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
     def user_interaction_save_dataframe(self):
         save_name = input("Enter the name of the file to save as: ")
-        self.data_handler.save_Search_Dataframe(save_name)
+        #self.data_handler.save_Search_Dataframe(save_name)
+        self.data_handler.save_dataframe(self.data_handler.Search_Dataframe, save_name)
 
         # self.updateCurrentPageAndNextPage()
         # print(f"now updating applied filters with this {new_applied_filters_list}")

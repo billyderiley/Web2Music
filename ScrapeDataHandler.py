@@ -10,6 +10,12 @@ import random
 class DataHandler:
 
     @staticmethod
+    def save_dataframe(dataframe, save_as_file_name):
+        dataframe.to_csv(path_or_buf=save_as_file_name, index=False)
+
+
+
+    @staticmethod
     def load_data(csv_file):
         df = pd.read_csv(csv_file)
         print(f"Data loaded from {csv_file}")
@@ -50,10 +56,25 @@ class DataHandler:
         """Set the loaded CSV file."""
         self.loaded_spotify_csv_file = csv_file
 
+    def create_new_spotify_dataframe(self, data=None):
+        """Create an empty Spotify DataFrame."""
+        spotify_dataframe = pd.DataFrame(data if data else None, columns= ['Spotify_ID','Spotify_Name','Spotify_Artist','Spotify_Album','Spotify_Release_Date','Spotify_Popularity','Spotify_Duration','Spotify_Preview_Url'])
+        return spotify_dataframe
+
+    def create_new_discogs_dataframe(self, data=None):
+        """Create an empty Discogs DataFrame."""
+        discogs_dataframe = pd.DataFrame(data if data else None, columns=['Discogs_Artists', 'Discogs_Titles', 'Discogs_Labels', 'Discogs_Genres', 'Discogs_Styles',
+                                                'Discogs_Countries', 'Discogs_Years', 'Discogs_Search_Filters', 'Discogs_Urls',
+                                                'Discogs_Formats', 'Discogs_Tracklist',  'Discogs_YouTube_Videos'])
+        return discogs_dataframe
+
     def update_spotify_dataframe_with_metadata(self, metadata_dict_list):
         # Check if a Spotify DataFrame exists and if not, create one
+        print(self.Spotify_Dataframe)
         if self.Spotify_Dataframe is None:
-            self.Spotify_Dataframe = pd.DataFrame()
+            self.Spotify_Dataframe = self.create_new_spotify_dataframe(data=metadata_dict_list)
+            print(self.Spotify_Dataframe)
+            return
 
         # Define the columns to check for duplicates
         check_columns = ['Spotify_ID', 'Spotify_Name', 'Spotify_Album', 'Spotify_Artist', 'Spotify_Duration']
@@ -143,7 +164,7 @@ class DataHandler:
         if 'SpotifyDataframe' not in path:
             # a str representation of the current date
             current_date = datetime.now().strftime("%Y-%m-%d")
-            path = path+'_SpotifyDataframe_' +current_date
+            path = path+'_SpotifyDataframe'
         if not path.endswith('.csv'):
             path += '.csv'
         # Check if the Spotify DataFrame is not empty
@@ -153,6 +174,23 @@ class DataHandler:
             print(f"Spotify DataFrame saved to {path}")
         else:
             print("No Spotify DataFrame to save.")
+
+    def save_Release_Dataframe(self, path):
+        """Save the Release DataFrame to a CSV file."""
+        # Ensure the file name ends with .csv
+        if 'ReleaseDataframe' not in path:
+            # a str representation of the current date
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            path = path+'_ReleaseDataframe'
+        if not path.endswith('.csv'):
+            path += '.csv'
+        # Check if the Release DataFrame is not empty
+        if self.Release_Dataframe is not None:
+            # Save the DataFrame to the specified path
+            self.Release_Dataframe.to_csv(path_or_buf=path, index=False)
+            print(f"Release DataFrame saved to {path}")
+        else:
+            print("No Release DataFrame to save.")
 
     def display_Search_Dataframedata(self):
         print(self.Search_Dataframe)
@@ -177,8 +215,20 @@ class DataHandler:
                                                 "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
 
 
-    def update_release_dataframe(self, center_releases_inner_content):
-        if self. Release_Dataframe is None:
+
+
+    def get_release_dataframe_from_search_dataframe(self):
+        """Create a Release DataFrame from the Search DataFrame."""
+        if self.Search_Dataframe is None:
+            print("DataHandler has no Search Dataframe to transform")
+            return
+        DiscogsReleaseScrape_obj = DiscogsReleaseScraper(self.Search_Dataframe)
+        DiscogsReleaseScrape_obj.get_release_dataframe_from_search_dataframe()
+        self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
+
+
+
+        """if self. Release_Dataframe is None:
             print("DataHandler has no Release Dataframe to transform")
             return
         else:
@@ -194,7 +244,22 @@ class DataHandler:
                     self.DiscogsReleaseScrape_obj.add_new_release(current_url_release_info_dict)
         print("Transformed Search_Dataframe to Release_Dataframe")
         print("Release_Dataframe :")
-        print(self.DiscogsReleaseScrape_obj.Release_Dataframe)
+        print(self.DiscogsReleaseScrape_obj.Release_Dataframe)"""
+
+
+
+    def update_release_dataframe_with_release_info(self, release_info_dict):
+        """Update the Release DataFrame with release info."""
+        if self.Release_Dataframe is None:
+            print("DataHandler has no Release Dataframe to update")
+            return
+
+
+    def update_release_info_in_dataframe(self, index, release_content):
+        # Update the DataFrame row at the given index with release_content
+        for key, value in release_content.items():
+            self.Release_Dataframe.at[index, key] = value
+
 
 
 

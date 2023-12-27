@@ -22,8 +22,10 @@ class SpotifyScraper():
             'Spotify_Artist': track.get('artists', [{'name': 'Unknown Artist'}])[0]['name'],
             'Spotify_Album': track.get('album').get('name', 'Unknown Album') if album_name is None else album_name,
             'Spotify_Release_Date': track.get('album').get('release_date', 'Unknown Release Date') if album_release_date is None else album_release_date,
-            'Spotify_Popularity': track.get('popularity', 0),
+            'Spotify_Popularity': track.get('popularity'),
             'Spotify_Duration': track.get('duration_ms', 0),
             'Spotify_Preview_Url': track.get('preview_url', 'No Preview Available')
         }
         return metadata
+
+

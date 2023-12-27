@@ -435,12 +435,15 @@ class DiscogsSearchScraper(BaseScraper):
             for nested_key, nested_value in nested_dict.items():
                 print(f"    Nested Key: {nested_key}, Nested Value: {nested_value}")
 
-    def get_page_range(self, new_discogs_search_url, page_number_range):
+    def get_page_range(self, new_discogs_search_url, page_number_range, max_number_of_pages):
         try:
-            int(page_number_range)
+            if int(page_number_range) > max_number_of_pages:
+                raise ValueError
             return [self.create_url_from_page_number(new_discogs_search_url, page_number_range)]
         except ValueError:
             start_number, end_number = int(page_number_range.split(' ')[0]), int(page_number_range.split(' ')[-1])
+            if end_number > max_number_of_pages:
+                raise ValueError
             if start_number > end_number:
                 ___start_number = end_number
                 end_number = start_number

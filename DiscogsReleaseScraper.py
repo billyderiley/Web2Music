@@ -4,45 +4,73 @@ import os
 
 
 class DiscogsReleaseScraper(BaseScraper):
+    @staticmethod
+    def create_Release_Dataframe():
+        release_dataframe = pd.DataFrame(columns=['Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
+            , 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years', 'Discogs_Formats','Discogs_Urls', 'Discogs_YouTube_Videos'])
+        return release_dataframe
 
-    def __init__(self, data_handler):
+
+    def __init__(self, Search_Dataframe, Release_Dataframe=None):
         super().__init__()
-        self.current_url_release_info_dict = None
-        self.data_handler = data_handler  # DataHandler instance
+        self.release_info_dict = None
+        #self.data_handler = data_handler  # DataHandler instance
+        self.Search_Dataframe = Search_Dataframe
+        self.Release_Dataframe = Search_Dataframe
 
-    def find_rows_needing_update(self):
-        # Identify rows that need more information
-        search_queue = []
-        for index, row in self.data_handler.Release_Dataframe.iterrows():
-            if pd.isnull(row['Discogs_Genres']) or pd.isnull(row['Discogs_Styles']) or \
-                    pd.isnull(row['Discogs_Countries']) or pd.isnull(row['Discogs_Years']) or \
-                    pd.isnull(row['Discogs_Tracklist']) or pd.isnull(row['Discogs_Labels']):
-                if 'Discogs_Urls' in row and pd.notnull(row['Discogs_Urls']):
-                    search_queue.append((index, row['Discogs_Urls']))
-        return search_queue
+        self.release_table_content = None
+        self.release_tracklist_content = None
+        self.release_video_links_content= None
+        self.current_url = None
 
-    def process_search_queue(self, search_queue):
-        for index, url in search_queue:
-            release_content = self.get_current_release_url_content(url)
-            self.update_release_info_in_dataframe(index, release_content)
+    def get_release_dataframe_from_search_dataframe(self):
+        search_queue = self.find_search_rows_needing_update()
+        rows = []
+        #discogs_url_to_update = self.Search_Dataframe['Discogs_Urls'][self.Search_Dataframe['Discogs_Genres'].notnull()].tolist()
+        for i, r in search_queue:
+            rows.append(r)
+            #self.navigate_to_release_url(r)
+        self.execute_in_batches(rows, action=self.navigate_to_release_url, batch_size=5)
 
-    def update_release_info_in_dataframe(self, index, release_content):
-        # Update the DataFrame row at the given index with release_content
-        for key, value in release_content.items():
-            self.data_handler.Release_Dataframe.at[index, key] = value
+    def navigate_to_release_url(self, url):
+        print(f"Processing {url}")
+        release_info_dict = self.get_current_release_url_content(url)
+        self.set_current_content(release_info_dict)
+        #self.send_content_to_dataframe(release_info_dict)
+        index = self.Search_Dataframe[self.Search_Dataframe['Discogs_Urls'] == url].index[0]
+        self.add_new_release_to_dataframe(index, release_info_dict)
+
+
 
     def get_current_release_url_content(self, url):
         SoupObj = self.get_Soup_from_url(url)
         release_table_content = self.get_release_table_content(SoupObj)
         release_tracklist_content = self.get_release_tracklist_content(SoupObj)
         release_video_links_content = self.get_release_video_links_content(SoupObj)
-        current_url_release_info_dict = {
+        release_info_dict = {
             'Discogs_Urls': url,
             'table_content': release_table_content,
             'tracklist_content': release_tracklist_content,
             'video_links_content': release_video_links_content
         }
-        return current_url_release_info_dict
+        return release_info_dict
+
+
+    def set_current_content(self, release_info_dict):
+        self.release_table_content = release_info_dict['table_content']
+        self.release_tracklist_content = release_info_dict['tracklist_content']
+        self.release_video_links_content = release_info_dict['video_links_content']
+        self.current_url = release_info_dict['Discogs_Urls']
+
+    def add_new_release_to_dataframe(self, index, release_content):
+        # Check if the release already exists in the DataFrame
+       # if self.is_duplicate(release_content['Discogs_Urls']):
+        #    return  # Avoid adding duplicate entry
+
+        # Update the DataFrame with the new release content by index
+        self.update_release_table_content(index, release_content['table_content'])
+        self.update_release_tracklist_content(index, release_content['tracklist_content'])
+        self.update_release_video_links_content(index, release_content['video_links_content'])
 
     def update_release_table_content(self, index, release_table_content):
         """
@@ -83,35 +111,51 @@ class DiscogsReleaseScraper(BaseScraper):
         # Iterate over the items in the row_updates dictionary
         for key, value in row_updates.items():
             # Update the corresponding column of the DataFrame at the specified index with the new value
-            self.data_handler.Release_Dataframe.at[index, key] = value
+            self.Release_Dataframe.at[index, key] = value
+
 
     def update_release_tracklist_content(self, index, release_tracklist_content):
         # Convert each inner list to a string and then join all strings
         tracklist_str = ', '.join([' - '.join(item) for item in release_tracklist_content])
         # Assign the string to the DataFrame
-        self.data_handler.Release_Dataframe.at[index, 'Discogs_Tracklist'] = tracklist_str
+        self.Release_Dataframe.at[index, 'Discogs_Tracklist'] = tracklist_str
 
     def update_release_video_links_content(self, index, release_video_links_content):
         # Convert video links list to a single string format
         video_links_str = ', '.join(release_video_links_content)
-        self.data_handler.Release_Dataframe.at[index, 'Discogs_YouTube_Videos'] = video_links_str
+        self.Release_Dataframe.at[index, 'Discogs_YouTube_Videos'] = video_links_str
 
-    def add_new_release_to_dataframe(self, index, release_content):
-        # Check if the release already exists in the DataFrame
-        if self.is_duplicate(release_content['Discogs_Urls']):
-            return  # Avoid adding duplicate entry
-
-        # Update the DataFrame with the new release content
-        self.update_release_table_content(index, release_content['table_content'])
-        self.update_release_tracklist_content(index, release_content['tracklist_content'])
-        self.update_release_video_links_content(index, release_content['video_links_content'])
 
     def is_duplicate(self, discogs_url):
         # Assuming 'Discogs_URLS' is a unique identifier for each release
         #url = table_content.get('Discogs_URLS')
-        if discogs_url in self.data_handler.Release_Dataframe['Discogs_Urls'].values:
+        if discogs_url in self.Release_Dataframe['Discogs_Urls'].values:
             return True
         return False
+
+    def find_search_rows_needing_update(self):
+        # Identify rows that need more information
+        search_queue = []
+        for index, row in self.Search_Dataframe.iterrows():
+            if pd.isnull(row['Discogs_Genres']) or pd.isnull(row['Discogs_Styles']) or \
+                    pd.isnull(row['Discogs_Countries']) or pd.isnull(row['Discogs_Years']) or \
+                    pd.isnull(row['Discogs_Tracklist']) or pd.isnull(row['Discogs_Labels']):
+                if 'Discogs_Urls' in row and pd.notnull(row['Discogs_Urls']):
+                    search_queue.append((index, row['Discogs_Urls']))
+                    # store the index of the row and the Discogs URL
+
+
+        return search_queue
+
+    """def process_search_queue(self, search_queue):
+        for index, url in search_queue:
+            release_content = self.get_current_release_url_content(url)
+            self.update_release_info_in_dataframe(index, release_content)"""
+
+
+
+
+
 
     """def main_scraping_method(self, url_list):
         for url in url_list:
@@ -243,11 +287,6 @@ class DiscogsReleaseScraper(BaseScraper):
             return url[start:end]
         return None  # Return None if the pattern is not found
 
-    #@staticmethod
-    def create_Release_Dataframe(self):
-        release_dataframe = pd.DataFrame(columns=['Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
-            , 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years', 'Discogs_Formats','Discogs_Urls', 'Discogs_YouTube_Videos'])
-        return release_dataframe
 
     """def save_release_dataframe(self):
         self.Release_Dataframe.to_csv(path_or_buf='release_dataframe.csv', index=False)
