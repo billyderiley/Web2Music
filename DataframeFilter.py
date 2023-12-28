@@ -1,10 +1,13 @@
 import pandas as pd
 from collections import Counter
 from ScrapeDataHandler import DataHandler
-class DataframeFilter:
+from UserInteraction import UserInteraction
+class DataframeFilter(UserInteraction):
     def __init__(self, dataframe):
+        super().__init__()
         self.dataframe = dataframe
         self.filtered_dataframe = None
+        #UserInteraction_obj = UserInteraction()
 
     def get_column_by_name(self, dataframe, column_name):
         """
@@ -54,15 +57,127 @@ class DataframeFilter:
         else:
             return self.dataframe[~self.dataframe[column].astype(str).str.contains(value)]
 
-
-
     def user_interaction_filter(self):
+        selected_column = self.select_column()
+        selected_value = self.select_value(selected_column)
+        self.apply_filter(selected_column, selected_value)
+
+        if self.ask_filter_by_unique_values():
+            min_count, max_count = self.get_min_max_counts()
+            self.filter_rows_by_unique_values(selected_column, min_count, max_count)
+
+    def get_min_max_counts(self):
+        min_count = int(self.get_user_input("Enter the minimum number of unique values per row: "))
+        max_count = int(self.get_user_input("Enter the maximum number of unique values per row: "))
+        return min_count, max_count
+
+    def ask_filter_by_unique_values(self):
+        return self.get_user_input(
+            "Do you want to filter rows based on the number of unique values? (yes/no): ").lower() == 'yes'
+
+    def select_column(self):
+        columns = self.dataframe.columns.tolist()
+        for i, column in enumerate(columns, 1):
+            print(f"{i}: {column}")
+        column_choice = int(self.get_user_input("Enter the number of the column to filter by: ")) - 1
+        return columns[column_choice]
+
+    def select_value(self, selected_column):
+        column_data = self.get_column_by_name(self.dataframe, selected_column)
+        unique_values_with_freq = self.process_column_values(column_data)
+        sorted_items = sorted(unique_values_with_freq.items(), key=lambda item: item[1], reverse=False)
+        for i, (value, freq) in enumerate(sorted_items, start=1):
+            print(f"{i}: {value} ({freq})")
+        value_choice = int(self.get_user_input("Enter the number of the value to filter by: ")) - 1
+        if 0 <= value_choice < len(sorted_items):
+            return sorted_items[value_choice][0]
+        else:
+            print("Invalid value number.")
+            return None
+
+    def apply_filter(self, selected_column, selected_value):
+        if selected_value is not None:
+            filtered_in = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=True)
+            filtered_out = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=False)
+            print("\nSelect the DataFrame to keep:")
+            print("1: Original DataFrame, size: ", self.dataframe.shape)
+            print("2: Filtered In DataFrame, size: ", filtered_in.shape)
+            print("3: Filtered Out DataFrame, size: ", filtered_out.shape)
+            choice = int(self.get_user_input("Enter your choice (1, 2, or 3): "))
+            if choice == 1:
+                self.filtered_dataframe = self.dataframe
+            elif choice == 2:
+                self.filtered_dataframe = filtered_in
+            elif choice == 3:
+                self.filtered_dataframe = filtered_out
+            else:
+                print("Invalid choice. Keeping the original DataFrame.")
+            print("New DataFrame Size: ", self.dataframe.shape)
+
+    def filter_rows_by_unique_values(self, column_name, min_count, max_count):
+        def count_unique_values(row):
+            values = row.split(',')
+            return len(set(values))  # set removes duplicates, so len gives the count of unique values
+
+        mask = self.dataframe[column_name].apply(count_unique_values).between(min_count, max_count)
+        self.filtered_dataframe = self.dataframe[mask]
+
+
+
+    """def user_interaction_filter(self):
         # Display columns and get user choice
         columns = self.dataframe.columns.tolist()
         for i, column in enumerate(columns, 1):
             print(f"{i}: {column}")
 
-        column_choice = int(input("Enter the number of the column to filter by: ")) - 1
+        column_choice = int(self.get_user_input("Enter the number of the column to filter by: ")) - 1
+        selected_column = columns[column_choice]
+        column_data = self.get_column_by_name(self.dataframe, selected_column)
+        unique_values_with_freq = self.process_column_values(column_data)
+
+        # Print sorted unique values with frequency
+        sorted_items = sorted(unique_values_with_freq.items(), key=lambda item: item[1], reverse=False)
+        for i, (value, freq) in enumerate(sorted_items, start=1):
+            print(f"{i}: {value} ({freq})")
+
+        # Get user's selection based on the index
+        value_choice = int(self.get_user_input("Enter the number of the value to filter by: ")) - 1
+        if 0 <= value_choice < len(sorted_items):
+            selected_value = sorted_items[value_choice][0]  # Get only the value, not the frequency
+            print(f"Selected value: {selected_value}, Column: {selected_column}")
+
+            filtered_in = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=True)
+            filtered_out = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=False)
+
+            # Prompt user to select which DataFrame to keep
+            print("\nSelect the DataFrame to keep:")
+            print("1: Original DataFrame, size: ", self.dataframe.shape)
+            print("2: Filtered In DataFrame, size: ", filtered_in.shape)
+            print("3: Filtered Out DataFrame, size: ", filtered_out.shape)
+            choice = int(self.get_user_input("Enter your choice (1, 2, or 3): "))
+
+            if choice == 1:
+                self.filtered_dataframe = self.dataframe
+            elif choice == 2:
+                self.filtered_dataframe = filtered_in
+            elif choice == 3:
+                self.filtered_dataframe = filtered_out
+            else:
+                print("Invalid choice. Keeping the original DataFrame.")
+        else:
+            print("Invalid value number.")
+
+        print("New DataFrame Size: ", self.dataframe.shape)"""
+
+
+    """def user_interaction_filter(self):
+        # Display columns and get user choice
+        columns = self.dataframe.columns.tolist()
+        for i, column in enumerate(columns, 1):
+            print(f"{i}: {column}")
+
+        #column_choice = int(input("Enter the number of the column to filter by: ")) - 1
+        column_choice = int(self.get_user_input( "Enter the number of the column to filter by: "))- 1
         selected_column = columns[column_choice]
         column_data = self.get_column_by_name(self.dataframe, selected_column)
         unique_values_with_freq = self.process_column_values(column_data)
@@ -78,7 +193,8 @@ class DataframeFilter:
             print(f"{i}: {value} ({freq})")
 
         # Get user's selection based on the index
-        selected_value = self.user_select_value(list(unique_values_with_freq.keys()))
+        selected_value = self.user_select_value(sorted_items)
+        print(f"Selected value= {selected_value}, colum= {selected_column}")
         filtered_in = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=True)
         filtered_out = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=False)
 
@@ -98,10 +214,11 @@ class DataframeFilter:
         else:
             print("Invalid choice. Keeping the original DataFrame.")
 
-        print("New DataFrame Size: ", self.dataframe.shape)
+        print("New DataFrame Size: ", self.dataframe.shape)"""
 
     def handle_user_selection(self, dataframe, column_name, selected_value, filter_in=True):
         def row_contains_value(row, value):
+            print(value)
             """
             Checks if the given value is present in the row. This function can be specialized further
             as needed.
@@ -114,6 +231,7 @@ class DataframeFilter:
                 # Assuming the row could have comma-separated values
                 values = row.split(',')
                 values = [val.strip() for val in values]
+                print(values)
                 return value in values
             else:
                 # For non-string rows, direct comparison
@@ -170,7 +288,8 @@ class DataframeFilter:
     """
         while True:
             try:
-                user_choice = int(input("Enter the number corresponding to your choice: ")) - 1
+                #user_choice = int(input("Enter the number corresponding to your choice: ")) - 1
+                user_choice = int(self.get_user_input( "Enter the number corresponding to your choice: ")) - 1
                 if 0 <= user_choice < len(unique_values):
                     return unique_values[user_choice]
                 else:

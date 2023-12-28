@@ -39,7 +39,7 @@ class TestDiscogsSearch(unittest.TestCase):
         test_url = 'https://www.discogs.com/search/'
  # The code snippet is a unit test for various classes related to Spotify playlist creation, Discogs release scraping, Discogs search, and data handling. It tests various methods and functionalities of these classes to ensure they are working correctly.
         self.Discogs_Search = DiscogsSearchGUI(test_url)
-        self.Discogs_Search.user_interaction()
+        self.Discogs_Search.user_interaction_menu()
 """
     def test_getSearchOptions(self):
         test_url = discogs_base_url

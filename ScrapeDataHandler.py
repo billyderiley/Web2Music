@@ -71,6 +71,7 @@ class DataHandler:
     def update_spotify_dataframe_with_metadata(self, metadata_dict_list):
         # Check if a Spotify DataFrame exists and if not, create one
         print(self.Spotify_Dataframe)
+        print(self.Spotify_Dataframe.columns)
         if self.Spotify_Dataframe is None:
             self.Spotify_Dataframe = self.create_new_spotify_dataframe(data=metadata_dict_list)
             print(self.Spotify_Dataframe)

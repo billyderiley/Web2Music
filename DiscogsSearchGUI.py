@@ -3,6 +3,8 @@ from DiscogsReleaseScraper import DiscogsReleaseScraper
 from ScrapeDataHandler import DataHandler
 from SpotifyPlaylistCreation import SpotifyPlaylistCreation
 from DataframeFilter import DataframeFilter
+from UserInteraction import UserInteraction
+
 import time
 
 import re
@@ -19,6 +21,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         else:
             self.start_url = start_url
         #self.start_up_search()
+        self.user_interaction = UserInteraction()
 
         # self.applied_filters = applied_filters
         # super(DiscogsSearch, self).get_search_page_content(start_url)
@@ -31,6 +34,15 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             self.data_handler = DataHandler()
 
     def user_interaction_load_search_dataframe(self):
+        csv_files = self.data_handler.list_csv_files()
+        selected_file = self.user_interaction.select_csv_file(csv_files)
+        if selected_file:
+            search_df = self.data_handler.load_data(selected_file)
+            self.data_handler.set_search_dataframe(search_df)
+            self.data_handler.set_loaded_search_csv_file(selected_file)
+            print(f"Search DataFrame loaded from {selected_file}")
+
+    def user_interaction_load_search_dataframe_backup(self):
         # List available CSV files and prompt user to select one
         csv_files = self.data_handler.list_csv_files()
         if not csv_files:
@@ -84,7 +96,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
     def updateSortByDict(self, sort_by_dict):
         self.sort_by_dict = sort_by_dict
 
-    def user_interaction(self):
+    def user_interaction_menu(self):
         # Initialize user input variable
         u_i = ''
 
@@ -136,7 +148,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
                   "11: Load Search DataFrame\n"
                   "12: Reload Search Pages\n"
                   "13: Filter DataFrame\n")
-            u_i = input("Enter Q to Quit, or any other key to continue: ")
+            #u_i = input("Enter Q to Quit, or any other key to continue: ")
+            u_i = self.user_interaction.get_user_input("Enter Q to Quit, or any other key to continue: ")
 
             # Execute the function based on user input
             func = switch.get(u_i)
@@ -144,7 +157,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
                 func()
             else:
                 # Handle invalid choices
-                print('Invalid choice. Please enter a number between 1 and 11, or Q to quit.')
+                print('Invalid choice. Please enter a number between 1 and 13, or Q to quit.')
 
     def user_interaction_add_filters(self):
         if self.current_url == self.start_url:
@@ -338,9 +351,16 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         self.data_handler.display_Search_Dataframedata()
 
     def user_interaction_save_dataframe(self):
-        save_name = input("Enter the name of the file to save as: ")
+        default_save_name = self.data_handler.loaded_search_csv_file
+        prompt_message = f"Enter a filename to save the DataFrame, or press Enter to use the default ('{default_save_name}'):"
+        save_name = self.user_interaction.get_user_input(prompt_message)
+        self.data_handler.save_Search_Dataframe(save_name)
+        print(f"DataFrame saved as: {save_name}")
+        # enter 1 to save
+       # if save_name is None:
+       #     save_name = input("Enter the name of the file to save as: ")
         #self.data_handler.save_Search_Dataframe(save_name)
-        self.data_handler.save_dataframe(self.data_handler.Search_Dataframe, save_name)
+       # self.data_handler.save_dataframe(self.data_handler.Search_Dataframe, save_name)
 
         # self.updateCurrentPageAndNextPage()
         # print(f"now updating applied filters with this {new_applied_filters_list}")

@@ -10,19 +10,23 @@ from fake_useragent import UserAgent
 import pandas as pd
 import sqlite3
 import pickle
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from DatabaseManager import DatabaseManager
 
 
-class BaseScraper:
-    def __init__(self, db_path='soup_urls.db'):
-        self.db_path = db_path
-        self.create_db_table()
+class BaseScraper(DatabaseManager):
+    def __init__(self):
+        super().__init__()
+        #self.db_path = db_path
+        #elf.create_db_table()
         self.BASE_df = self.createDF()
         #self.Soupy_Url_Dict = {}
         #self.load_soup_dict_from_csv('soup_urls.csv')  # Load URLs from CSV on initialization
 
         self.base_discogs_url = "https://discogs.com"
         self.base_discogs_search_url = "https://discogs.com/search"
+
+
 
     def createDF(self):
         #df = pd.DataFrame(columns=["Release Artists", "Release Titles", "Discogs Url", "Discogs Tags", "SoundCloud Url", "Youtube Url"])
@@ -142,44 +146,7 @@ class BaseScraper:
             self.Soupy_Url_Dict[url] = SoupObj
         return SoupObj.prettify()"""
 
-    def create_db_table(self):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        # Create the table with an additional timestamp column
-        cursor.execute('''
-                CREATE TABLE IF NOT EXISTS soups (
-                    url TEXT PRIMARY KEY, 
-                    soup_object TEXT, 
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-        """cursor.execute('''CREATE TABLE IF NOT EXISTS soups 
-                          (url TEXT PRIMARY KEY, soup_object TEXT)''')"""
-        conn.commit()
-        conn.close()
 
-    def save_data_to_db(self, url, soup_object):
-        # Serialize the soup object
-        serialized_soup = pickle.dumps(soup_object)
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO soups (url, soup_object, timestamp) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                       (url, serialized_soup))
-        conn.commit()
-        conn.close()
-
-    def get_data_from_db(self, url):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT soup_object FROM soups WHERE url = ?", (url,))
-        data = cursor.fetchone()
-        conn.close()
-        if data:
-            # Unpickle the soup object
-            soup_object = pickle.loads(data[0])
-            return soup_object
-        else:
-            return None
 
     """def save_soup_dict_to_csv(self, filepath):
         df = pd.DataFrame(list(self.Soupy_Url_Dict.items()), columns=['Url', 'Soup_obj'])
@@ -220,22 +187,6 @@ class BaseScraper:
 
         self.execute_in_batches(urls, self.reload_webpage, batch_size)
         print("All webpages reloaded and updated.")
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    def execute_in_batches(self, urls, action, batch_size=5):
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            # Submit each URL to the executor
-            future_to_url = {executor.submit(action, url): url for url in urls}
-
-            # Process the results as they complete
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    future.result()  # This is where the action function is executed
-                    #print(f"Loaded webpage: {future.result()}")  # Print the URL returned by the action function
-                except Exception as exc:
-                    print(f"{url} generated an exception: {exc}")
 
 
 

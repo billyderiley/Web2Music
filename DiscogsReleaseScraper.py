@@ -30,7 +30,7 @@ class DiscogsReleaseScraper(BaseScraper):
         for i, r in search_queue:
             rows.append(r)
             #self.navigate_to_release_url(r)
-        self.execute_in_batches(rows, action=self.navigate_to_release_url, batch_size=5)
+        self.execute_in_batches(rows, action=self.navigate_to_release_url, batch_size=15)
 
     def navigate_to_release_url(self, url):
         print(f"Processing {url}")
