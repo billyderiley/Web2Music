@@ -333,7 +333,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         #    return
         dataframe = self.data_handler.Search_Dataframe
         DataframeFilter_obj = DataframeFilter(dataframe=dataframe)
-        DataframeFilter_obj.user_interaction_filter()
+        DataframeFilter_obj.dataframe_alteration_menu()
         self.data_handler.set_release_dataframe(DataframeFilter_obj.filtered_dataframe)
         self.data_handler.set_search_dataframe(DataframeFilter_obj.filtered_dataframe)
 
@@ -383,7 +383,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
         # If there is a search DataFrame available, set it as the Spotify DataFrame in DataHandler
         if self.data_handler.Search_Dataframe is not None:
-            SpotifyPlaylistCreation_obj.data_handler.set_spotify_dataframe(self.data_handler.Search_Dataframe)
+            SpotifyPlaylistCreation_obj.data_handler.set_search_dataframe(self.data_handler.Search_Dataframe)
 
         # Call the user menu of SpotifyPlaylistCreation for further actions
         SpotifyPlaylistCreation_obj.user_menu()

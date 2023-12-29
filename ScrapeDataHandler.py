@@ -21,13 +21,26 @@ class DataHandler:
         print(f"Data loaded from {csv_file}")
         return df
 
-    @staticmethod
+    """@staticmethod
     def list_csv_files():
         print("Available CSV files:")
         csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
         for idx, file in enumerate(csv_files, 1):
             print(f"{idx}. {file}")
         return csv_files
+    """
+    @staticmethod
+    def list_csv_files():
+        print("Available CSV files:")
+        csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
+
+        # Sort files by modification time (most recent first)
+        csv_files.sort(key=lambda x: os.path.getmtime(x), reverse=False)
+
+        for idx, file in enumerate(csv_files, 1):
+            print(f"{idx}. {file} (Last Modified: {os.path.getmtime(file)})")
+        return csv_files
+
     def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None,
                  loaded_search_csv_file = None,  loaded_spotify_csv_file = None):
         self.Search_Dataframe = Search_Dataframe
@@ -70,11 +83,8 @@ class DataHandler:
 
     def update_spotify_dataframe_with_metadata(self, metadata_dict_list):
         # Check if a Spotify DataFrame exists and if not, create one
-        print(self.Spotify_Dataframe)
-        print(self.Spotify_Dataframe.columns)
         if self.Spotify_Dataframe is None:
             self.Spotify_Dataframe = self.create_new_spotify_dataframe(data=metadata_dict_list)
-            print(self.Spotify_Dataframe)
             return
 
         # Define the columns to check for duplicates
@@ -165,7 +175,7 @@ class DataHandler:
         if 'SpotifyDataframe' not in path:
             # a str representation of the current date
             current_date = datetime.now().strftime("%Y-%m-%d")
-            path = path+'_SpotifyDataframe'
+            path += '_SpotifyDataframe'
         if not path.endswith('.csv'):
             path += '.csv'
         # Check if the Spotify DataFrame is not empty
@@ -261,6 +271,22 @@ class DataHandler:
         for key, value in release_content.items():
             self.Release_Dataframe.at[index, key] = value
 
+class DataFrameUtility:
+    @staticmethod
+    def clean_and_split(x):
+        """
+        Splits the string by comma and strips spaces from each element.
+
+        :param x: The string to be split and cleaned.
+        :return: A list of cleaned strings.
+        """
+        return [val.strip() for val in str(x).split(',')]
+
+    @staticmethod
+    def divide_into_batches( dataframe, batch_size):
+        # Split the DataFrame into smaller batches
+        batches = [dataframe.iloc[i:i + batch_size] for i in range(0, len(dataframe), batch_size)]
+        return batches
 
 
 

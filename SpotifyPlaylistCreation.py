@@ -1,5 +1,6 @@
 from spotipy.oauth2 import SpotifyOAuth
 import spotipy
+from DatabaseManager import DatabaseManager
 import pandas as pd
 import os
 import re
@@ -12,11 +13,136 @@ from Audio import SpotifyPreviewPlayer
 from datetime import datetime
 from difflib import SequenceMatcher
 import Levenshtein as lv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
+class CachedSpotipy(spotipy.Spotify):
+    def __init__(self, database_manager=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.db_manager = DatabaseManager() if not database_manager else database_manager # DatabaseManager instance
+        self.search_queue = []
+        self.batch_size = 5
+        self.last_process_time = time.time()
+
+    """def search(self, *args, **kwargs):
+        # Construct a unique query identifier
+        query = f"search {args} {kwargs}"
+        request_type = 'search'
+
+        # Check for existing request
+        existing_response = self.db_manager.check_existing_spotify_request(query, request_type)
+        if existing_response:
+            return existing_response
+
+        # Make API request
+        response = super().search(*args, **kwargs)
+
+        # Save the request and response to the database
+        self.db_manager.save_spotify_api_request(query, request_type, 'API Response', response)
+
+        return response"""
+
+    def process_search_queue(self):
+        with ThreadPoolExecutor(max_workers=self.batch_size) as executor:
+            futures = [executor.submit(self.perform_search, args, kwargs) for args, kwargs in self.search_queue]
+            for future in as_completed(futures):
+                # Handle the search results
+                pass
+        self.search_queue = []
+
+    def execute_in_batches_spotify_api_call(self, tasks):
+        with ThreadPoolExecutor(max_workers=self.batch_size) as executor:
+            # Submit each task in the batch for execution
+            futures = [executor.submit(self.perform_api_call, task) for task in tasks]
+
+            # Process the completed tasks
+            for future in as_completed(futures):
+                result = future.result()
+                # Handle the search results
+                # Process the results here, such as saving them to the database or other operations
+
+        # Clear the queue after processing
+        self.search_queue = []
+
+    def perform_api_call(self, task):
+        # Extract action and arguments from the task
+        action = task.get('action')
+        args = task.get('args', ())
+        kwargs = task.get('kwargs', {})
+
+        # Perform the action with the provided arguments
+        return action(*args, **kwargs)
+
+    def perform_search(self, args, kwargs):
+        # Construct a unique query identifier
+        query = f"search {args} {kwargs}"
+        request_type = 'search'
+
+        # Check for existing request
+        existing_response = self.db_manager.check_existing_spotify_request(query, request_type)
+        if existing_response:
+            return existing_response
+
+        # Make API request
+        response = super().search(*args, **kwargs)
+
+        # Save the request and response to the database
+        self.db_manager.save_spotify_api_request(query, request_type, 'API Response', response)
+
+        return response
+
+    def search(self, *args, **kwargs):
+        # Construct a unique query identifier
+        query = f"search {args} {kwargs}"
+        request_type = 'search'
+
+        # Check for existing request in the database
+        existing_response = self.db_manager.check_existing_spotify_request(query, request_type)
+        if existing_response:
+            return existing_response
+
+        # Create a task for the search
+        task = {
+            'action': super().search,  # Reference the original search method of spotipy
+            'args': args,
+            'kwargs': kwargs
+        }
+
+        # Add the task to the queue
+        self.search_queue.append(task)
+
+        # Process the queue if conditions are met
+        if len(self.search_queue) >= self.batch_size or (time.time() - self.last_process_time) > 2:
+            self.execute_in_batches_spotify_api_call(self.search_queue)
+            self.last_process_time = time.time()
+            self.search_queue = []  # Clear the queue after processing
+
+
+    """def search(self, *args, **kwargs):
+        # Construct a unique query identifier
+        query = f"search {args} {kwargs}"
+        request_type = 'search'
+
+        # Check for existing request in the database
+        existing_response = self.db_manager.check_existing_spotify_request(query, request_type)
+        if existing_response:
+            # Handle the existing response immediately
+            # You might want to return this response or process it as required
+            return existing_response
+
+        # If no existing response, add the search to the queue
+        self.search_queue.append((args, kwargs))
+
+        # Process the queue if it reaches the batch size or if 2 seconds have passed
+        if len(self.search_queue) >= self.batch_size or (time.time() - self.last_process_time) > 2:
+            self.process_search_queue()
+            self.last_process_time = time.time()"""
+
+    # Add other overridden methods as needed...
 
 class SpotifyPlaylistCreation(SpotifyScraper):
     def __init__(self, client_id, client_secret, redirect_uri, data_handler):
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id,
+        self.sp = CachedSpotipy(auth_manager=SpotifyOAuth(client_id=client_id,
                                                             client_secret=client_secret,
                                                             redirect_uri=redirect_uri,
                                                             scope="playlist-modify-public"))
@@ -582,7 +708,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         return results['tracks']['items']
 
     def user_menu(self):
-        preview_player = SpotifyPreviewPlayer()  # Create an instance of SpotifyPreviewPlayer
+        #preview_player = SpotifyPreviewPlayer()  # Create an instance of SpotifyPreviewPlayer
 
         while True:
             self.display_dataframe_status()
@@ -613,6 +739,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 self.handle_save_spotify_csv()
             elif choice == '6':
                 print("Exiting...")
+                break
             elif choice == '7':
                 self.generate_playlist_from_dataframe(self.data_handler.Search_Dataframe, create_playlist=False)
             elif choice == '8':
