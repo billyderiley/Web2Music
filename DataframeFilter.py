@@ -333,3 +333,27 @@ class DataframeFilter(UserInteraction):
                 print("Please enter a valid number.")
 
 
+
+
+    """
+    Methods for getting information from the dataframe
+    """
+
+    def get_search_items(self, column_names):
+        """
+        Extracts values from specified columns of the DataFrame and returns them as a list of tuples.
+
+        :param column_names: List of column names to extract data from.
+        :return: List of tuples with values from the specified columns.
+        """
+        if not all(column in self.dataframe.columns for column in column_names):
+            print(f"One or more specified columns are not in the DataFrame.")
+            return []
+
+        search_items = []
+        for _, row in self.dataframe.iterrows():
+            item = tuple(row[column] for column in column_names)
+            print(f"item: {item}")
+            search_items.append(item)
+
+        return search_items

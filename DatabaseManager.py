@@ -158,7 +158,7 @@ class DatabaseManager:
                 except Exception as exc:
                     print(f"{url} generated an exception: {exc}")
 
-    def execute_in_batches_spotify_api_call(self, action, batch_size=5, *args, **kwargs):
+    """def execute_in_batches_spotify_api_call(self, action, batch_size=5, *args, **kwargs):
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures = [executor.submit(action, *args, **kwargs) for args, kwargs in self.search_queue]
             for future in as_completed(futures):
@@ -166,7 +166,7 @@ class DatabaseManager:
                 # Process the results here, such as saving them to the database or other operations
                 pass
         # Clear the queue after processing
-        self.search_queue = []
+        self.search_queue = []"""
 
     def execute_in_batches_dataframe(self, dataframe, process_function, batch_size=5):
 

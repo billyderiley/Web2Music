@@ -16,6 +16,7 @@ class UserInteraction(DatabaseManager):
 
         super().__init__()
         self.history = InMemoryHistory()
+        self.fancy_prompt=False
 
     def load_history_into_prompt(self, method_name, call_location):
         history_data = self.load_user_interaction_history(method_name, call_location)
@@ -24,32 +25,39 @@ class UserInteraction(DatabaseManager):
         for input_line in history_data:
             self.history.append_string(input_line)
 
+    # create a basic get_user_input method that will be used for testing withoutr fancy prompt
+
+
     def get_user_input(self, prompt_message):
         method_name = self.get_contextual_method_name()
         call_location = self.get_call_location()
         print(f"Call Location: {call_location} and Method Name: {method_name}")
-        self.load_history_into_prompt(method_name, call_location)
 
-        # Define a custom style for the prompt
-        style = Style.from_dict({
-            'prompt': 'ansigreen',
-            '': 'ansiblue'
-        })
+        if self.fancy_prompt:
+            self.load_history_into_prompt(method_name, call_location)
 
-        # Use WordCompleter for auto-completion based on history
-        completer = WordCompleter([record for record in self.history.get_strings()], ignore_case=True)
-        #completer = WordCompleter(['test'], ignore_case=True)
+            # Define a custom style for the prompt
+            style = Style.from_dict({
+                'prompt': 'ansigreen',
+                '': 'ansiblue'
+            })
 
-        # Prompt with auto-suggestions, styling, and auto-completion
-        user_input = prompt(
-            prompt_message,
-            history=self.history,
-            auto_suggest=AutoSuggestFromHistory(),
-            style=style,
-            completer=completer,
-            complete_style=CompleteStyle.MULTI_COLUMN
-        )
-        self.save_user_interaction(method_name, call_location, user_input)
+            # Use WordCompleter for auto-completion based on history
+            completer = WordCompleter([record for record in self.history.get_strings()], ignore_case=True)
+            #completer = WordCompleter(['test'], ignore_case=True)
+
+            # Prompt with auto-suggestions, styling, and auto-completion
+            user_input = prompt(
+                prompt_message,
+                history=self.history,
+                auto_suggest=AutoSuggestFromHistory(),
+                style=style,
+                completer=completer,
+                complete_style=CompleteStyle.MULTI_COLUMN
+            )
+            self.save_user_interaction(method_name, call_location, user_input)
+        else:
+            user_input = input(prompt_message)
         return user_input
 
     def select_csv_file(self, csv_files):
