@@ -1,13 +1,20 @@
 import pandas as pd
+import random
+import string
 from collections import Counter
 from ScrapeDataHandler import DataHandler
 from UserInteraction import UserInteraction
 from ScrapeDataHandler import DataFrameUtility
+import Levenshtein as lv
+
+
+
 class DataframeFilter(UserInteraction):
-    def __init__(self, dataframe):
+    def __init__(self, dataframe, master_u_ids_list=None):
         super().__init__()
         self.dataframe = dataframe
         self.filtered_dataframe = None
+
         #UserInteraction_obj = UserInteraction()
 
     def get_column_by_name(self, dataframe, column_name):
@@ -339,21 +346,101 @@ class DataframeFilter(UserInteraction):
     Methods for getting information from the dataframe
     """
 
-    def get_search_items(self, column_names):
+    def get_search_items(self, dataframe ,search_columns, keep_unique_ids=True, master_u_ids_list=None):
+        """
+        Extracts values from specified columns of the DataFrame and returns them as a list of tuples.
+
+        :param column_names: List of column names to extract data from.
+        :param keep_unique_ids: Boolean flag to determine if unique IDs should be added.
+        :return: List of tuples with values from the specified columns.
+        """
+        if keep_unique_ids:
+            if not master_u_ids_list:
+                master_u_ids_list = []
+            if 'u_id' not in dataframe.columns:
+                dataframe['u_id'] = [self.generate_unique_id(master_u_ids_list) for _ in range(len(dataframe))]
+            search_columns = ['u_id'] + search_columns
+
+        if not all(column in dataframe.columns for column in search_columns):
+            print("One or more specified columns are not in the DataFrame.")
+            return []
+
+        search_items = []
+        print(search_columns)
+        print(len(dataframe))
+        print(dataframe.shape)
+        for _, row in dataframe.iterrows():
+            item = tuple(DataframeFilter.normalize_str([row[column] for column in search_columns]))
+            #item = tuple(self.remove_url_unfriendly_characters(str(row[column])) for column in search_columns)
+            print(f"item: {item}")
+            search_items.append(item)
+        print(f"search_items: {search_items}")
+        return search_items
+
+    @staticmethod
+    def generate_unique_id(exclusion_list=None):
+        """Generates a random unique identifier."""
+        length = 10  # Adjust the length as needed
+        characters = string.ascii_letters + string.digits
+        id = ''.join(random.choice(characters) for _ in range(length))
+        if exclusion_list is not None:
+            while id in exclusion_list:
+                id = ''.join(random.choice(characters) for _ in range(length))
+        return id
+
+    def get_search_items_backup(self, column_names, keep_unique_ids=True):
         """
         Extracts values from specified columns of the DataFrame and returns them as a list of tuples.
 
         :param column_names: List of column names to extract data from.
         :return: List of tuples with values from the specified columns.
         """
+        if keep_unique_ids:
+            # add unique_id to column_names
+            column_names = ['u_id'] + column_names
+
         if not all(column in self.dataframe.columns for column in column_names):
             print(f"One or more specified columns are not in the DataFrame.")
-            return []
-
+            # add a new column to the dataframe and fill these with random values between 1 and 1000 with alpha characters too
+            #self.dataframe['u_id'] = [random.randint(1, 100) for _ in range(len(self.dataframe.index))]
         search_items = []
         for _, row in self.dataframe.iterrows():
-            item = tuple(row[column] for column in column_names)
+
+            item = tuple(self.remove_url_unfriendly_characters(row[column]) for column in column_names)
             print(f"item: {item}")
             search_items.append(item)
 
         return search_items
+
+    """
+    Methods for comparing strings
+    """
+    @staticmethod
+    def normalize_str(to_normalize_strings):
+        """
+        Normalizes a list of strings by converting them to lowercase and removing whitespace.
+        Also removes any URL-unfriendly characters
+
+        :param to_normalize_strings: List of strings to normalize.
+        :return: List of normalized strings.
+        """
+        normalized_strings = []
+        for l_string in to_normalize_strings:
+            normalized_string = str(l_string).lower().strip()
+            normalized_string = DataframeFilter.remove_url_unfriendly_characters(normalized_string)
+            normalized_strings.append(normalized_string)
+        return normalized_strings
+
+
+    @staticmethod
+    def remove_url_unfriendly_characters(l_string):
+        remove_characters = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', '.']
+        for character in remove_characters:
+            l_string = l_string.replace(character, '')
+        return l_string
+
+    @staticmethod
+    def similarity(str1, str2):
+        if str1 is None or str2 is None:
+            return 0  # Return 0 similarity if either string is None
+        return lv.ratio(str(str1).lower(), str(str2).lower())

@@ -4,6 +4,7 @@ from ScrapeDataHandler import DataHandler
 from SpotifyPlaylistCreation import SpotifyPlaylistCreation
 from DataframeFilter import DataframeFilter
 from UserInteraction import UserInteraction
+from DiscogsBatchSearcher import DiscogsBatchSearch
 
 import time
 
@@ -114,7 +115,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             '10': self.user_interaction_create_spotify_playlist,
             '11': self.user_interaction_load_search_dataframe,  # New function for loading the search DataFrame
             '12': self.user_interaction_reload_all_webpages,  # New method for reloading webpages
-            '13': self.user_interaction_filter_dataframe
+            '13': self.user_interaction_filter_dataframe,
+            '14': self.user_interaction_discogs_batch_search,
         }
 
         # Main loop for user interaction
@@ -147,7 +149,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
                   "10: Create Spotify Playlist from Search Results\n"
                   "11: Load Search DataFrame\n"
                   "12: Reload Search Pages\n"
-                  "13: Filter DataFrame\n")
+                  "13: Filter DataFrame\n"
+                  "14: Batch Search\n")
             #u_i = input("Enter Q to Quit, or any other key to continue: ")
             u_i = self.user_interaction.get_user_input("Enter Q to Quit, or any other key to continue: ")
 
@@ -243,36 +246,64 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         return new_discogs_search_url"""
 
     def user_interaction_remove_filters(self):
-        # Display applied filters starting from the second item (index 1)
-        if len(self.applied_filters) >= 2:
-            # Using dictionary comprehension to display every second item starting from index 1
-            displayed_filters = {i // 2 + 1: self.applied_filters[i] for i in
-                                 range(0, len(self.applied_filters), 2)}
-            print(f"Applied filters: {displayed_filters}")
-        else:
-            print(f"Applied filters: {self.applied_filters}")
+        """
+        Handles the user interaction for removing applied filters.
+        """
 
-        if len(self.search_dict_get_label_type_keys()) == 0:
+        # Check if there are enough filters to display
+        if len(self.applied_filters) < 2:
+            print("No filters to remove.")
             return
 
-        remove_index = int(input("Enter index to remove: ")) - 1
-        # Adjust the remove_index to point to the correct element in applied_filters
-        adjusted_remove_index = remove_index * 2 + 1
+        # Display applied filters with their indices for user selection
+        displayed_filters = self.display_applied_filters()
+        print(f"Applied filters: {displayed_filters}")
 
-        # Check if adjusted_remove_index is valid
-        if 0 <= adjusted_remove_index < len(self.applied_filters):
-            # Remove the element and its preceding element
-            self.applied_filters = self.remove_applied_filter(self.applied_filters, adjusted_remove_index)
+        # Get user input for the filter to remove
+        try:
+            remove_index = int(input("Enter index to remove: ")) - 1
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+            return
+
+        # Validate the chosen index
+        if remove_index not in displayed_filters:
+            print("Invalid index.")
+            return
+
+        # Remove the selected filter
+        self.remove_filter_at_index(remove_index)
+
+    def display_applied_filters(self):
+        """
+        Creates a dictionary of filters with their display indices.
+
+        :return: Dictionary of displayed filters.
+        """
+        return {i + 1: self.applied_filters[i*2:i*2 + 2]
+                for i in range(len(self.applied_filters) // 2)}
+
+    def remove_filter_at_index(self, index):
+        """
+        Removes a filter and its corresponding value at the specified index.
+
+        :param index: Index of the filter to remove.
+        """
+        # The filters and their values are stored consecutively in the list,
+        # e.g., [filter1, value1, filter2, value2, ...].
+        # We need to calculate the actual start index in self.applied_filters.
+        actual_index = index * 2
+
+        # Check if the actual index is within the range of the list
+        if actual_index < len(self.applied_filters) - 1:
+            # Remove both the filter and its value
+            del self.applied_filters[actual_index:actual_index + 2]
+
+            # Update the search URL after removing the filter
             url = self.getUrlFromAppliedFilters(self.applied_filters)
             self.navigate_to_search_url(url)
         else:
-            print("Invalid index")
-
-    # Helper function to remove element and its previous element
-    def remove_applied_filter(self, filters, index):
-        if index > 0 and index < len(filters):
-            del filters[index - 1:index + 1]
-        return filters
+            print("Invalid index for removal.")
 
     def test_function(self, max_rows_to_update=None):
         enter_key1 = '2'
@@ -339,13 +370,13 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
 
 
-
-
-
-        #max_rows = int(input("Enter the number of rows to fill in: "))
-       # if max_rows == '':
-       #     max_rows = None
-       # self.data_handler.fill_in_missing_data(max_rows_to_update=max_rows)
+    def user_interaction_discogs_batch_search(self):
+        # Initialize DiscogsBatchSearch object with DataHandler instance
+        Discogs_Batch_Search = DiscogsBatchSearch(data_handler=self.data_handler)
+        #print(self.data_handler.Search_Dataframe)
+        df = Discogs_Batch_Search.process_search_and_update(dataframe=self.data_handler.Search_Dataframe, search_columns=['Discogs_Artists', 'Discogs_Titles'])
+        self.data_handler.set_release_dataframe(df)
+        self.data_handler.save_Release_Dataframe(path=self.data_handler.loaded_search_csv_file)
 
     def user_interaction_display_dataframe(self):
         self.data_handler.display_Search_Dataframedata()

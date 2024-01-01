@@ -11,59 +11,36 @@ class BatchAndCachedSpotipy(spotipy.Spotify, SpotifyScraper):
     def __init__(self, database_manager=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.db_manager = DatabaseManager() if not database_manager else database_manager # DatabaseManager instance
-        self.tasks_queue = []
+        #self.tasks_queue = []
         self.batch_size = 5
         self.last_process_time = time.time()
 
+    def batch_album_search(self, search_items):
+        #aggregated_albums = []
+        aggregated_albums = self.execute_in_batches_album_track_searches(search_items)
+        return aggregated_albums
 
-
-
-    def batch_album_search(self, search_items, request_type='album'):
-        aggregated_uris = []
-        tasks_queue = []
-        # Process each search item and add to queue
-        for artist, title in search_items:
-            if "," in artist:
-                artist = artist.split(",")[0].rstrip(" ").lstrip(" ")
-            # Format the search query
-            query = f"artist:{artist} {request_type}:{title}"
-            self.add_to_tasks_queue(query, request_type)
-
-        # Execute the batch search
-        if self.tasks_queue:
-            #aggregated_uris.extend(self.execute_in_batches_track_searches(self.track_search_queue))
-            aggregated_uris = self.execute_in_batches_album_track_searches(self.tasks_queue)
-            print(f"Aggregated URIs: {aggregated_uris}")
-             # Clear the queue after processing
-            #self.tasks_queue = []
-        return aggregated_uris
-
-    def add_to_tasks_queue(self, query, request_type):
-        # Create a task tuple with args and kwargs for the search
-        task = ((query,), {'type': request_type})  # args is a tuple containing the query, kwargs contains the type
-        # Append the task to the search queue
-        self.tasks_queue.append(task)
-
-    def execute_in_batches_album_track_searches(self, tasks):
+    def execute_in_batches_album_track_searches(self, search_items, batch_size=5):
         aggregated_results = []
         print("Executing track searches in batches...")
-        with ThreadPoolExecutor(max_workers=self.batch_size) as executor:
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
             # Submit each task in the batch for execution
-            futures = [executor.submit(self.perform_album_track_search, *task) for task in tasks]
+            futures = [executor.submit(self.perform_album_track_search, u_id, artist, title) for u_id, artist, title in search_items]
+            # Get total batches for visual feedback
             completed_batches = 0
+            total_batches = len(futures) // batch_size + (1 if len(futures) % batch_size != 0 else 0)
 
-            total_batches = len(futures) // self.batch_size + (1 if len(futures) % self.batch_size != 0 else 0)
             # Process the completed tasks and aggregate results
             for future in as_completed(futures):
                 result = future.result()
-                print(type(result))
-                if result:
+                print(f"what is this result {result}")
+                if result and len(result) > 0:
                     aggregated_results.append(result)
-                # aggregated_results.extend(result if result else [])
+
                 # Update and print the completed batch count
                 completed_batches += 1
-                if completed_batches % self.batch_size == 0 or completed_batches == len(futures):
-                    print(f"Completed batch {completed_batches // self.batch_size} of {total_batches}")
+                if completed_batches % batch_size == 0 or completed_batches == len(futures):
+                    print(f"Completed batch {completed_batches // batch_size} of {total_batches}")
         print("All batches completed.")
         return aggregated_results
 
@@ -88,6 +65,103 @@ class BatchAndCachedSpotipy(spotipy.Spotify, SpotifyScraper):
                     print(f"Completed batch {completed_batches // self.batch_size} of {total_batches}")
         print("All batches completed.")
         return aggregated_results"""
+
+    def perform_album_track_search(self, u_id, artist, title):
+        """Attempts to search for an album, then for a track if the album is not found."""
+        search_type='album'
+        search_request = (artist, title)
+        # First, try searching for an album
+        response = self.execute_search(artist, title, search_type)
+        if response:
+            album_data = self.process_album_data_from_response(search_request=search_request, response=response)
+            if album_data != 'various' and album_data is not None:
+                return u_id, album_data
+
+        print("Retrying as track search to get album...")
+        # If album search was unsuccessful, try searching for a track
+        re_response = self.execute_search(artist, title, search_type='track')
+        track_data = self.extract_track_data(re_response)
+        if track_data:
+            album = self.get_album_from_track_data(track_data)
+            album_data = self.process_album_data_from_response(search_request=search_request, response=album)
+            if album_data != 'various' and album_data is not None:
+                return u_id, album_data
+        else:
+            return None
+
+    def execute_search(self, artist, title, search_type):
+        """General function to execute a search."""
+        query = f"artist:{artist} {search_type}:{title}"
+        response = super().search(q=query, type=search_type)
+        print(f"response is {response}")
+        print(f" we searched for {query}")
+        return response
+
+    def process_album_data_from_response(self, search_request, response):
+        artist, title = search_request
+        album_data = self.extract_album_data(response)
+        print("found album data or not ")
+        print(album_data)
+        if album_data:
+            # Similarity check for album name against search title
+            if album_data['album_name'].lower() == title.lower():
+                return album_data
+            else:
+                if self.similarity(album_data['album_name'].lower(), title.lower()) < 0.6:
+                    if album_data['album_name'].lower() in title.lower() or title.lower() in album_data['album_name'].lower():
+                        if artist.lower() != 'various':
+                            return album_data
+                        else:
+                            return 'various'
+        return None
+
+    def extract_album_data(self, response):
+        """Extracts album data from the search response."""
+        print(f"Extracting album data from response: {response}")
+        if 'albums' not in response:
+            return None
+        response = response['albums']
+        if response and 'items' in response and response['items']:
+            print("Album found in response.")
+            album = response['items'][0]
+            return {
+                'album_id': album['id'],
+                'album_tracks': super().album_tracks(album['id'])['items'],
+                'album_name': album['name'],
+                'album_release_date': album['release_date'],
+                # Get the artist name and IDs  for all artists on the album
+                'album_artist_ids': [artist['id'] for artist in album['artists']],
+                'album_artists': [artist['name'] for artist in album['artists']]
+            }
+        else:
+            print("No album found in response.")
+            return None
+
+    def extract_track_data(self, response):
+        # print(f"Extracting track data from response: {response}")
+        response = response['tracks']
+        """Extracts track data from the search response."""
+        if response and 'items' in response and response['items']:
+            # print("Track found in response.")
+            track = response['items'][0]
+            print(f"track is {track}")
+            return {
+                'id': track['id'],
+                'album_name': track['album']['name'],
+                'album_id': track['album']['id'],
+                # 'tracks': super().album_tracks(track['id'])['items'],
+                'name': track['name']
+            }
+        else:
+            print("No track found in response.")
+            return None
+
+    def get_album_from_track_data(self, track_data):
+        album_id = track_data['album_id']
+        album = super().album(album_id)
+        return album
+
+
 
     def search_spotify(self, artist, title, search_type='track', max_retries=2, delay=1):
         if "," in artist:
@@ -128,7 +202,7 @@ class BatchAndCachedSpotipy(spotipy.Spotify, SpotifyScraper):
                 print(f"An unexpected error occurred: {e}")
                 return None
 
-    def perform_album_track_search(self, args, kwargs):
+    def perform_album_track_search_old(self, args, kwargs):
         track_uris_list = []
         track_uris_set = set()
         track_metadata_list = []
@@ -146,17 +220,28 @@ class BatchAndCachedSpotipy(spotipy.Spotify, SpotifyScraper):
         print(f"Performing track search with args: {args} and kwargs: {kwargs}")
         items = []
         response = super().search(*args, **kwargs)
-        if 'tracks' in response:
-            items = response['tracks']['items']
-        elif 'albums' in response:
-            items = response['albums']['items']
-        if items:
+        print(f" the response is {response}")
+        print(f"{response is None}")
+        print(f"type of response is {type(response)}")
+        items = response['items']
+        print(len(items))
+        print("did this just print")
+        if response:
+            album_id = response[0]['id']
+            print(f" the album id is {album_id}")
+
+            #items = response
+        if response:
             #self.db_manager.save_spotify_api_request(query, request_type, 'API Response', response)
-            album_id = items[0]['id']
+            album_id = response[0]['id']
             album_tracks = super().album_tracks(album_id)['items']
-            album_name = items[0]['name']
-            album_release_date = items[0]['release_date']
+            album_name = response[0]['name']
+            album_release_date = response[0]['release_date']
         else:
+            print(f"No album found for query {query}.")
+            return None
+
+
             # alter the *args to search for a track instead of an album
             # Extract the first element and replace 'album' with 'track'
             modified_arg = args[0].replace('album', 'track')

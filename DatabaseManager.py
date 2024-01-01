@@ -3,6 +3,7 @@ import pickle
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import inspect
 from collections import defaultdict
+import datetime
 
 class DatabaseManager:
     def __init__(self, db_path='soup_urls.db'):
@@ -130,15 +131,24 @@ class DatabaseManager:
     def get_data_from_db(self, url):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT soup_object FROM soups WHERE url = ?", (url,))
+        cursor.execute("SELECT soup_object, timestamp FROM soups WHERE url = ?", (url,))
         data = cursor.fetchone()
         conn.close()
+
         if data:
-            # Unpickle the soup object
-            soup_object = pickle.loads(data[0])
-            return soup_object
+            soup_object, timestamp = data
+            soup_object = pickle.loads(soup_object)
+            timestamp = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+            return soup_object, timestamp
         else:
-            return None
+            return None, None
+
+    def delete_data_from_db(self, url):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM soups WHERE url = ?", (url,))
+        conn.commit()
+        conn.close()
 
 
 

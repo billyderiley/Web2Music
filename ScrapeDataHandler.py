@@ -1,5 +1,6 @@
 from DiscogsSearchScraper import DiscogsSearchScraper
 from DiscogsReleaseScraper import DiscogsReleaseScraper
+from SpotifyScraper import SpotifyScraper
 import pandas as pd
 import os
 from datetime import datetime
@@ -12,8 +13,6 @@ class DataHandler:
     @staticmethod
     def save_dataframe(dataframe, save_as_file_name):
         dataframe.to_csv(path_or_buf=save_as_file_name, index=False)
-
-
 
     @staticmethod
     def load_data(csv_file):
@@ -49,49 +48,102 @@ class DataHandler:
         self.loaded_search_csv_file = loaded_search_csv_file
         self.loaded_spotify_csv_file = loaded_spotify_csv_file
 
-    def set_spotify_dataframe(self, df):
-        """Set the Spotify DataFrame."""
-        self.Spotify_Dataframe = df
+        self.master_u_id_Dataframe_path = "master_u_id_Dataframe.csv"
+        self.master_u_id_Dataframe = (
+            self.loadfromCSV(self.master_u_id_Dataframe_path)) \
+            if os.path.exists(self.master_u_id_Dataframe_path) \
+            else self.create_new_u_id_dataframe()
 
-    def set_search_dataframe(self, df):
-        """Set the Search DataFrame."""
-        self.Search_Dataframe = df
+        self.master_Spotify_Dataframe_path = "master_Spotify_Dataframe.csv"
+        self.master_Spotify_Dataframe = (
+            self.loadfromCSV(self.master_Spotify_Dataframe_path)) \
+            if os.path.exists(self.master_Spotify_Dataframe_path) \
+            else self.create_new_spotify_dataframe()
 
-    def set_release_dataframe(self, df):
-        """Set the Release DataFrame."""
-        self.Release_Dataframe = df
+        self.master_Discogs_Dataframe_path = "master_Discogs_Dataframe.csv"
+        self.master_Discogs_Dataframe = (
+            self.loadfromCSV(self.master_Discogs_Dataframe_path)) \
+            if os.path.exists(self.master_Discogs_Dataframe_path) \
+            else self.create_new_discogs_dataframe()
 
-    def set_loaded_search_csv_file(self, csv_file):
-        """Set the loaded CSV file."""
-        self.loaded_search_csv_file = csv_file
+
+
+    """def display_dataframe(self):
+        if self.Search_Dataframe is not None:
+            print("Search Dataframe :")
+            print(self.Search_Dataframe)
+        if self.Release_Dataframe is not None:
+            print("Release Dataframe :")
+            print(self.Release_Dataframe)"""
+
+    def loadfromCSV(self, csv_file):
+        try:
+            return pd.read_csv(csv_file)
+        except FileNotFoundError:
+            return None
+
+    def save_dataframe(self, dataframe, path):
+        dataframe.to_csv(path, index=False)
+        print(f"DataFrame saved to {path}")
+
+
+    """
+    Spotify Dataframes
+    """
+
+    def create_new_spotify_dataframe(self, data=None):
+        """Create an empty Spotify DataFrame."""
+        spotify_dataframe = pd.DataFrame(data if data else None,
+        columns= ['u_id', 'Spotify_Track_ID','Spotify_Track_Name','Spotify_Track_Artist',
+                   'Spotify_Album_Name', 'Spotify_Track_Artist_ID',
+                  'Spotify_Track_Duration','Spotify_Track_Preview_Url', 'Spotify_Track_Number',
+                  'Spotify_Album_ID', 'Spotify_Album_Artists'
+            ,'Spotify_Album_Artist_IDs', 'Spotify_Album_Release_Date'])
+        return spotify_dataframe
 
     def set_loaded_spotify_csv_file(self, csv_file):
         """Set the loaded CSV file."""
         self.loaded_spotify_csv_file = csv_file
 
-    def create_new_spotify_dataframe(self, data=None):
-        """Create an empty Spotify DataFrame."""
-        spotify_dataframe = pd.DataFrame(data if data else None, columns= ['Spotify_ID','Spotify_Name','Spotify_Artist','Spotify_Album','Spotify_Release_Date','Spotify_Popularity','Spotify_Duration','Spotify_Preview_Url'])
-        return spotify_dataframe
+    def set_spotify_dataframe(self, df):
+        """Set the Spotify DataFrame."""
+        self.Spotify_Dataframe = df
 
-    def create_new_discogs_dataframe(self, data=None):
-        """Create an empty Discogs DataFrame."""
-        discogs_dataframe = pd.DataFrame(data if data else None, columns=['Discogs_Artists', 'Discogs_Titles', 'Discogs_Labels', 'Discogs_Genres', 'Discogs_Styles',
-                                                'Discogs_Countries', 'Discogs_Years', 'Discogs_Search_Filters', 'Discogs_Urls',
-                                                'Discogs_Formats', 'Discogs_Tracklist',  'Discogs_YouTube_Videos'])
-        return discogs_dataframe
+    def update_spotify_dataframes_with_album_metadata(self, album_metadata):
+        if self.Spotify_Dataframe is None:
+            self.Spotify_Dataframe = self.create_new_spotify_dataframe()
+        # Check if the album metadata is a list
+        if isinstance(album_metadata, list):
+            # Iterate through the list of album metadata
+            for album in album_metadata:
+                # Get the album's tracks
+                album_tracks = album.get('album_tracks')
+                album_id = album.get('album_id')
+                album_name = album.get('name')
+                album_release_date = album.get('album_release_date')
+                album_artists = album.get('album_artists')
+                album_artist_ids = album.get('album_artist_ids')
 
-    def update_spotify_dataframe_with_metadata(self, metadata_dict_list):
+                # Iterate through the tracks
+                for track in album_tracks:
+                    # Get the track's metadata
+                    track_metadata_dict = SpotifyScraper.get_spotify_metadata_from_track(track, album_id=album_id, album_name=album_name,
+                                                                          album_release_date=album_release_date, album_artists=album_artists, album_artist_ids=album_artist_ids)
+                    # Update the Spotify DataFrame with the track metadata
+                    self.update_spotify_dataframe_with_track_metadata([track_metadata_dict])
+        else:
+            raise ValueError("album_metadata must be a list")
+
+    def update_spotify_dataframe_with_track_metadata(self,track_metadata_dict):
         # Check if a Spotify DataFrame exists and if not, create one
         if self.Spotify_Dataframe is None:
-            self.Spotify_Dataframe = self.create_new_spotify_dataframe(data=metadata_dict_list)
-            return
+            self.Spotify_Dataframe = self.create_new_spotify_dataframe()
 
         # Define the columns to check for duplicates
-        check_columns = ['Spotify_ID', 'Spotify_Name', 'Spotify_Album', 'Spotify_Artist', 'Spotify_Duration']
+        check_columns = ['u_id', 'Spotify_Track_ID', 'Spotify_Track_Name', 'Spotify_Album_Name', 'Spotify_Track_Artist', 'Spotify_Track_Duration']
 
         # Create a DataFrame from the list of metadata dictionaries
-        new_rows_df = pd.DataFrame(metadata_dict_list)
+        new_rows_df = pd.DataFrame(track_metadata_dict)
 
         # Filter out rows that already exist in Spotify_Dataframe
         filtered_new_rows_df = new_rows_df[~new_rows_df.apply(
@@ -111,8 +163,6 @@ class DataHandler:
                 return True
 
         return False
-
-
 
     def update_spotify_dataframe_with_artist_metrics(self, artist, artist_metrics):
         """Update the Spotify DataFrame with artist's Spotify popularity and followers."""
@@ -134,41 +184,7 @@ class DataHandler:
         # Update the DataFrame with the concatenated preview URLs
         self.Spotify_Dataframe.at[row.name, 'Preview_URLs'] = preview_urls_str
 
-    """def display_dataframe(self):
-        if self.Search_Dataframe is not None:
-            print("Search Dataframe :")
-            print(self.Search_Dataframe)
-        if self.Release_Dataframe is not None:
-            print("Release Dataframe :")
-            print(self.Release_Dataframe)"""
-
-
-    """def save_dataframe(self, save_as_file_name):
-        if save_as_file_name is None:
-            save_as_file_name = "1_-2test"
-        else:
-            if save_as_file_name.endswith('.csv'):
-                save_as_file_name = save_as_file_name
-            else:
-                save_as_file_name += '.csv'
-        self.df.to_csv(path_or_buf=save_as_file_name)"""
-
-    def loadfromCSV(self, csv_file):
-        try:
-            return pd.read_csv(csv_file)
-        except FileNotFoundError:
-            return None
-
-
-    def save_Search_Dataframe(self, path):
-        if path.endswith('.csv'):
-            pass
-        else:
-            path = path+'.csv'
-        #path = input("Enter a Save name for Dataframe")
-        self.Search_Dataframe.to_csv(path_or_buf=path, index=False)
-
-    def save_Spotify_Dataframe(self, path):
+    def save_Spotify_Dataframe(self, path, update_master_Spotify_Dataframe=True):
         """Save the Spotify DataFrame to a CSV file."""
         # Ensure the file name ends with .csv
 
@@ -183,8 +199,94 @@ class DataHandler:
             # Save the DataFrame to the specified path
             self.Spotify_Dataframe.to_csv(path_or_buf=path, index=False)
             print(f"Spotify DataFrame saved to {path}")
+            if update_master_Spotify_Dataframe:
+                self.update_and_save_master_Spotify_Dataframe(self.Spotify_Dataframe)
         else:
             print("No Spotify DataFrame to save.")
+
+    def update_and_save_master_Spotify_Dataframe(self, dataframe):
+        if dataframe is not None:
+            if self.master_Spotify_Dataframe_path is not None:
+                master_Spotify_Dataframe = self.loadfromCSV(self.master_Spotify_Dataframe_path)
+                if master_Spotify_Dataframe is not None:
+                    # Add only new rows to the master Spotify DataFrame
+                    master_Spotify_Dataframe = pd.concat([master_Spotify_Dataframe, dataframe], ignore_index=True).drop_duplicates(
+                        subset=['u_id','Spotify_Track_ID', 'Spotify_Track_Name', 'Spotify_Album_Name', 'Spotify_Album_ID', 'Spotify_Track_Duration', 'Spotify_Track_Number'])
+                else:
+                    master_Spotify_Dataframe = dataframe
+                self.save_dataframe(master_Spotify_Dataframe, self.master_Spotify_Dataframe_path)
+                print(f"Master Spotify DataFrame saved to {self.master_Spotify_Dataframe_path}")
+            self.order_master_Spotify_Dataframe_by_Spotify_Album_ID_then_Spotify_Track_Number()
+
+    def order_master_Spotify_Dataframe_by_Spotify_Album_ID_then_Spotify_Track_Number(self):
+        if self.master_Spotify_Dataframe_path is not None:
+            master_Spotify_Dataframe = self.loadfromCSV(self.master_Spotify_Dataframe_path)
+            if master_Spotify_Dataframe is not None:
+                master_Spotify_Dataframe = master_Spotify_Dataframe.sort_values(by=[ 'Spotify_Album_Release_Date','Spotify_Album_ID' ], ascending=False)
+                self.save_dataframe(master_Spotify_Dataframe, self.master_Spotify_Dataframe_path)
+                print(f"Master Spotify DataFrame saved to {self.master_Spotify_Dataframe_path}")
+            else:
+                print("No Master Spotify DataFrame to save.")
+
+    def get_master_Spotify_Dataframe_u_ids_list(self):
+        if self.master_Spotify_Dataframe['u_id'] is not None:
+            return self.master_Spotify_Dataframe['u_id'].tolist()
+        else:
+            return []
+
+
+    """
+    Discogs Dataframes
+    """
+
+    def set_search_dataframe(self, df):
+        """Set the Search DataFrame."""
+        self.Search_Dataframe = df
+
+    def set_release_dataframe(self, df):
+        """Set the Release DataFrame."""
+        self.Release_Dataframe = df
+
+    def set_loaded_search_csv_file(self, csv_file):
+        """Set the loaded CSV file."""
+        self.loaded_search_csv_file = csv_file
+
+    def create_new_discogs_dataframe(self, data=None):
+        """Create an empty Discogs DataFrame."""
+        discogs_dataframe = pd.DataFrame(data if data else None, columns=['u_id','Discogs_Artists', 'Discogs_Titles', 'Discogs_Labels', 'Discogs_Genres', 'Discogs_Styles',
+                                                'Discogs_Countries', 'Discogs_Years', 'Discogs_Search_Filters', 'Discogs_Urls',
+                                                'Discogs_Formats', 'Discogs_Tracklist',  'Discogs_YouTube_Videos'])
+        return discogs_dataframe
+
+    def display_Search_Dataframedata(self):
+        print(self.Search_Dataframe)
+
+    def save_Search_Dataframe(self, path):
+        if path.endswith('.csv'):
+            pass
+        else:
+            path = path+'.csv'
+        #path = input("Enter a Save name for Dataframe")
+        self.Search_Dataframe.to_csv(path_or_buf=path, index=False)
+
+    def update_search_dataframe(self, center_releases_content):
+        if center_releases_content is not None:
+            if isinstance(center_releases_content, list):
+                # Convert the list of dictionaries to a DataFrame
+                new_df = pd.DataFrame(center_releases_content, columns=["u_id","Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
+
+            else:
+                raise ValueError("new_data must be a list of dictionaries")
+        else:
+            raise ValueError("self.center_releases_content is None")
+
+        # Concatenate new_df with self.df and drop duplicates
+        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
+            subset=["u_id","Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
 
     def save_Release_Dataframe(self, path):
         """Save the Release DataFrame to a CSV file."""
@@ -203,31 +305,6 @@ class DataHandler:
         else:
             print("No Release DataFrame to save.")
 
-    def display_Search_Dataframedata(self):
-        print(self.Search_Dataframe)
-
-    def update_search_dataframe(self, center_releases_content):
-        if center_releases_content is not None:
-            if isinstance(center_releases_content, list):
-                # Convert the list of dictionaries to a DataFrame
-                new_df = pd.DataFrame(center_releases_content, columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
-
-            else:
-                raise ValueError("new_data must be a list of dictionaries")
-        else:
-            raise ValueError("self.center_releases_content is None")
-
-        # Concatenate new_df with self.df and drop duplicates
-        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
-            subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
-
-
-
-
     def get_release_dataframe_from_search_dataframe(self):
         """Create a Release DataFrame from the Search DataFrame."""
         if self.Search_Dataframe is None:
@@ -236,8 +313,6 @@ class DataHandler:
         DiscogsReleaseScrape_obj = DiscogsReleaseScraper(self.Search_Dataframe)
         DiscogsReleaseScrape_obj.get_release_dataframe_from_search_dataframe()
         self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
-
-
 
         """if self. Release_Dataframe is None:
             print("DataHandler has no Release Dataframe to transform")
@@ -257,19 +332,61 @@ class DataHandler:
         print("Release_Dataframe :")
         print(self.DiscogsReleaseScrape_obj.Release_Dataframe)"""
 
-
-
     def update_release_dataframe_with_release_info(self, release_info_dict):
         """Update the Release DataFrame with release info."""
         if self.Release_Dataframe is None:
             print("DataHandler has no Release Dataframe to update")
             return
 
-
     def update_release_info_in_dataframe(self, index, release_content):
         # Update the DataFrame row at the given index with release_content
         for key, value in release_content.items():
             self.Release_Dataframe.at[index, key] = value
+
+    """
+    Discogs Master Dataframes
+    """
+    def update_and_save_master_Discogs_Dataframe(self, dataframe):
+        if dataframe is not None:
+            if self.master_Discogs_Dataframe_path is not None:
+                master_Discogs_Dataframe = self.loadfromCSV(self.master_Discogs_Dataframe_path)
+                if master_Discogs_Dataframe is not None:
+                    # Add only new rows to the master Spotify DataFrame
+                    master_Discogs_Dataframe = pd.concat([master_Discogs_Dataframe, dataframe],
+                                                         ignore_index=True).drop_duplicates(
+                        subset=['u_id'])
+                else:
+                    master_Discogs_Dataframe = dataframe
+                self.save_dataframe(master_Discogs_Dataframe, self.master_Discogs_Dataframe_path)
+                print(f"Master Discogs DataFrame saved to {self.master_Discogs_Dataframe_path}")
+            self.order_master_Discogs_Dataframe_by_Discogs_Unique_ID()
+
+    def order_master_Discogs_Dataframe_by_Discogs_Unique_ID(self):
+        if self.master_Discogs_Dataframe_path is not None:
+            master_Discogs_Dataframe = self.loadfromCSV(self.master_Discogs_Dataframe_path)
+            if master_Discogs_Dataframe is not None:
+                master_Discogs_Dataframe = master_Discogs_Dataframe.sort_values(
+                    by=['u_id'], ascending=False)
+                self.save_dataframe(master_Discogs_Dataframe, self.master_Discogs_Dataframe_path)
+                print(f"Master Discogs DataFrame saved to {self.master_Discogs_Dataframe_path}")
+            else:
+                print("No Master Discogs DataFrame to save.")
+
+    def get_master_Discogs_Dataframe_u_ids_list(self):
+        if self.master_Discogs_Dataframe['u_id'] is not None:
+            return self.master_Discogs_Dataframe['u_id'].tolist()
+        else:
+            return []
+
+
+    """
+    Master u_id Dataframe
+    """
+    def create_new_u_id_dataframe(self, data=None):
+        """Create an empty Spotify DataFrame."""
+        spotify_dataframe = pd.DataFrame(data if data else None,
+                                         columns=['u_id'])
+        return spotify_dataframe
 
 class DataFrameUtility:
     @staticmethod

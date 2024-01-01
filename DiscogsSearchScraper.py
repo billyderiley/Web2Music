@@ -455,7 +455,7 @@ class DiscogsSearchScraper(BaseScraper):
 
 
 def create_search_dataframe():
-    search_df = pd.DataFrame(columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
+    search_df = pd.DataFrame(columns=["u_id" ,"Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
                                             "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
                                             "Discogs_Formats", "Discogs_Tracklist", "Discogs_YouTube_Videos"])
 

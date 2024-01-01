@@ -117,8 +117,62 @@ class BaseScraper(DatabaseManager):
         return SoupObj
 
     def get_Soup_from_url(self, url):
+        """
+        Retrieves or creates a BeautifulSoup object from a given URL.
+
+        If the URL data exists in the database and is less than a day old,
+        it returns the stored BeautifulSoup object. Otherwise, it fetches a new
+        BeautifulSoup object using Selenium, updates the database, and returns it.
+
+        :param url: The URL to fetch or retrieve the BeautifulSoup object for.
+        :return: BeautifulSoup object.
+        """
+        # Retrieve the stored soup object and its timestamp from the database
+        soup_obj, timestamp = self.get_data_from_db(url)
+
+        # Check if a valid soup object is retrieved and if it's a search URL
+        if soup_obj:
+            if 'search' in url:
+                # Determine if the search soup object is older than 1 day
+                is_outdated = datetime.datetime.now() - timestamp > datetime.timedelta(days=1)
+                if is_outdated:
+                    # The data is old, so delete it and fetch a fresh soup object
+                    self.delete_and_refresh_soup(url)
+                    soup_obj = self.fetch_and_save_new_soup(url)
+            return soup_obj
+
+        else:
+            # No valid soup object found, fetch a new one
+            print(f"No valid soup object found for URL: {url}")
+            soup_obj = self.fetch_and_save_new_soup(url)
+            return soup_obj
+
+    def delete_and_refresh_soup(self, url):
+        """
+        Deletes an outdated soup object from the database and fetches a new one.
+
+        :param url: The URL associated with the soup object to refresh.
+        :return: The refreshed BeautifulSoup object.
+        """
+        self.delete_data_from_db(url)
+        return self.fetch_and_save_new_soup(url)
+
+    def fetch_and_save_new_soup(self, url):
+        """
+        Fetches a new BeautifulSoup object using Selenium and saves it to the database.
+
+        :param url: The URL to fetch the BeautifulSoup object for.
+        :return: The newly fetched BeautifulSoup object.
+        """
+        SoupObj = self.createSoupObjFromUrlSelenium(url)
+        self.save_data_to_db(url, SoupObj)
+        return SoupObj
+
+
+    def get_Soup_from_url_backup(self, url):
         # Check if URL data exists in the database
-        soup_obj = self.get_data_from_db(url)
+        if 'search' in url:
+            soup_obj = self.get_data_from_db(url)
         if soup_obj:
             return soup_obj
         else:
@@ -127,6 +181,7 @@ class BaseScraper(DatabaseManager):
             # Save the new soup object to the database
             self.save_data_to_db(url, SoupObj)
             return SoupObj
+
         """
        if url in self.Soupy_Url_Dict.keys():
             try:

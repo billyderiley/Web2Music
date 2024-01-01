@@ -4,6 +4,7 @@ from DataframeFilter import DataframeFilter
 import re
 from requests.exceptions import RequestException
 import time
+from datetime import datetime
 from SpotifyScraper import SpotifyScraper
 from Audio import SpotifyPreviewPlayer
 import Levenshtein as lv
@@ -50,62 +51,84 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         if create_playlist:
             playlist_name = self.get_user_input_for_action("playlist", "Enter named for spotify playlist")
         # Example usage
-        dataframe_filter = DataframeFilter(dataframe)
-        search_items = dataframe_filter.get_search_items(['Discogs_Artists', 'Discogs_Titles'])
+        master_u_ids_list = self.data_handler.get_master_Spotify_Dataframe_u_ids_list()
+        dataframe_filter = DataframeFilter(dataframe, master_u_ids_list=master_u_ids_list)
+        u_id_search_items = dataframe_filter.get_search_items(['Discogs_Artists', 'Discogs_Titles'], keep_unique_ids=True)
 
-        # Perform batch search
-        aggregated_uris = self.sp.batch_album_search(search_items)
-        #print(f"Aggregated URIs: {aggregated_uris}")
-        print(f"{len(aggregated_uris)} tracks found out of {len(search_items)}")
+        # Perform batch album search
+        aggregated_albums_list = self.sp.batch_album_search(search_items=u_id_search_items)
+        print(f"{len(aggregated_albums_list)} albums found out of {len(u_id_search_items)}")
 
-        # Update DataFrame with metadata
-        if aggregated_uris:
-            for uri in aggregated_uris:
+        track_uris_list = []
+        track_uris_set = set()
+        track_metadata_list = []
+        # iterate through the aggregated albums keys and get the values
+        print(f"check here")
+        print(aggregated_albums_list)
+        for album_tuple in aggregated_albums_list:
+            print(album_tuple)
+            u_id = album_tuple[0]
+            album = album_tuple[1]
+            print(u_id, album)
 
-                self.data_handler.update_spotify_dataframe_with_metadata(self.get_spotify_metadata_from_track(uri))
-            if create_playlist:
-                self.create_playlist(playlist_name, aggregated_uris)
-            if save_Spotify_Dataframe:
-                self.data_handler.save_Spotify_Dataframe(self.data_handler.loaded_search_csv_file)
 
-    def search_spotify(self, artist, title, search_type='track', max_retries=2, delay=1):
-        if "," in artist:
-            artist = artist.split(",")[0]
-        query = f"artist:{artist} {search_type}:{title}"
-        print(f"Searching Spotify with query: {query}")  # Debugging info
+            for track in album['album_tracks']:
 
-        retries = 0
-        while retries < max_retries:
-            try:
-                results = self.sp.search(q=query, type=search_type)
-                #print(results)
+                print(track)
+                if track['uri'] not in track_uris_set:
+                    track_uris_set.add(track['uri'])
+                    track_uris_list.append(track['uri'])
+                    print(f"Added track: {track['name']}")
+                    track_metadata = self.get_spotify_metadata_from_track(track,u_id=u_id, album_name=album['album_name'],
+                                                                      album_release_date=album['album_release_date'],
+                                                                      album_artists=album['album_artists'],
+                                                                      album_artist_ids=album['album_artist_ids'],
+                                                                      album_id=album['album_id'])
+                    track_metadata_list.append(track_metadata)
+            self.data_handler.update_spotify_dataframe_with_track_metadata(track_metadata_list)
+        if track_uris_list and create_playlist:
+            self.create_playlist(playlist_name, track_uris_list)
+        if save_Spotify_Dataframe:
+            self.data_handler.save_Spotify_Dataframe(self.data_handler.loaded_search_csv_file)
 
-                items = results['tracks']['items'] if search_type == 'track' else results['albums']['items']
-                if items:
-                    return items
-                else:
+        def search_spotify(self, artist, title, search_type='track', max_retries=2, delay=1):
+            if "," in artist:
+                artist = artist.split(",")[0]
+            query = f"artist:{artist} {search_type}:{title}"
+            print(f"Searching Spotify with query: {query}")  # Debugging info
+
+            retries = 0
+            while retries < max_retries:
+                try:
+                    results = self.sp.search(q=query, type=search_type)
+                    #print(results)
+
+                    items = results['tracks']['items'] if search_type == 'track' else results['albums']['items']
+                    if items:
+                        return items
+                    else:
+                        return None
+                except spotipy.exceptions.SpotifyException as e:
+                    if e.http_status == 429:  # Rate limiting
+                        retry_after = int(e.headers.get('Retry-After', 1))  # Default to 1 second if header is missing
+                        print(f"Rate limit reached. Retrying after {retry_after} seconds.")
+                        time.sleep(retry_after)
+                        continue  # Retry the request
+                    else:
+                        print(f"Spotify API error for query {query}: {e}")
+                        return None
+                except RequestException as e:
+                    retries += 1
+                    if retries < max_retries:
+                        print(
+                            f"Network error encountered. Retrying in {delay} seconds... (Attempt {retries}/{max_retries})")
+                        time.sleep(delay)
+                    else:
+                        print(f"Network error during Spotify search after {max_retries} attempts: {e}")
+                        return None
+                except Exception as e:
+                    print(f"An unexpected error occurred: {e}")
                     return None
-            except spotipy.exceptions.SpotifyException as e:
-                if e.http_status == 429:  # Rate limiting
-                    retry_after = int(e.headers.get('Retry-After', 1))  # Default to 1 second if header is missing
-                    print(f"Rate limit reached. Retrying after {retry_after} seconds.")
-                    time.sleep(retry_after)
-                    continue  # Retry the request
-                else:
-                    print(f"Spotify API error for query {query}: {e}")
-                    return None
-            except RequestException as e:
-                retries += 1
-                if retries < max_retries:
-                    print(
-                        f"Network error encountered. Retrying in {delay} seconds... (Attempt {retries}/{max_retries})")
-                    time.sleep(delay)
-                else:
-                    print(f"Network error during Spotify search after {max_retries} attempts: {e}")
-                    return None
-            except Exception as e:
-                print(f"An unexpected error occurred: {e}")
-                return None
 
     def process_spotify_search_result(self, search_result, search_type):
         if search_type == 'track':
@@ -122,7 +145,6 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 return None
         else:
             return None
-
 
     """def search_spotify_backup(self, artist, title):
         query = f"artist:{artist} track:{title}"
@@ -252,7 +274,8 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 else:
                     # If no track found, continue to the next row in DataFrame
                     continue
-            # CHECK THE ALBUM NAME AGAINST THE TITLE
+
+
             if album_name.lower() != title.lower():
                 #print(f"Album name '{album_name}' does not match title exactly '{title}'.")
                 #continue
@@ -614,7 +637,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
                 print("Exiting...")
                 break
             elif choice == '7':
-                self.update_dataframe_and_create_playlist(self.data_handler.Search_Dataframe, create_playlist=False)
+                self.update_dataframe_and_create_playlist(self.data_handler.Search_Dataframe, create_playlist=False, save_Spotify_Dataframe=True)
             elif choice == '8':
                 self.play_previews()
             else:
@@ -674,7 +697,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
 
     def handle_playlist_creation(self, choice):
         if choice == '3':
-            self.update_dataframe_and_create_playlist(self.data_handler.Search_Dataframe)
+            self.update_dataframe_and_create_playlist(self.data_handler.Search_Dataframe, create_playlist=True, save_Spotify_Dataframe=True)
         elif choice == '4':
             self.generate_playlist_from_selected_artists(self.data_handler.Search_Dataframe)
 

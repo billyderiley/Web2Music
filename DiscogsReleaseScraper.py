@@ -6,12 +6,12 @@ import os
 class DiscogsReleaseScraper(BaseScraper):
     @staticmethod
     def create_Release_Dataframe():
-        release_dataframe = pd.DataFrame(columns=['Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
+        release_dataframe = pd.DataFrame(columns=['u_id','Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
             , 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years', 'Discogs_Formats','Discogs_Urls', 'Discogs_YouTube_Videos'])
         return release_dataframe
 
 
-    def __init__(self, Search_Dataframe, Release_Dataframe=None):
+    def __init__(self, Search_Dataframe=None, Release_Dataframe=None):
         super().__init__()
         self.release_info_dict = None
         #self.data_handler = data_handler  # DataHandler instance
@@ -55,6 +55,93 @@ class DiscogsReleaseScraper(BaseScraper):
         }
         return release_info_dict
 
+    def process_release_data_to_dict(self, u_id, *args):
+        """
+        Processes release data into a dictionary of key-value pairs.
+        Accepts multiple dictionary inputs like release_data, best_search_release_info, etc.
+
+        :param u_id: Unique identifier for the release.
+        :param args: Variable number of dictionaries containing release data.
+        :return: Dictionary with structured release data.
+        """
+        # Define the label mapping
+        label_to_column_mapping = {
+            'Label': 'Discogs_Labels',
+            'Format': 'Discogs_Formats',
+            'Country': 'Discogs_Countries',
+            'Released': 'Discogs_Years',
+            'Genre': 'Discogs_Genres',
+            'Style': 'Discogs_Styles'
+        }
+
+        # Initialize the dictionary with u_id
+        processed_data = {'u_id': u_id}
+
+        for data_dict in args:
+            if isinstance(data_dict, dict):
+                for key, value in data_dict.items():
+                    # Use label_to_column_mapping for release_table_content keys
+                    if key == 'table_content':
+                        for label, label_value in value.items():
+                            column_name = label_to_column_mapping.get(label)
+                            if column_name:
+                                processed_data[column_name] = label_value
+                    elif key == 'tracklist_content':
+                        # Special processing for tracklist
+                        tracklist_str = ', '.join([' - '.join(item) for item in value])
+                        processed_data['Discogs_Tracklist'] = tracklist_str
+                    elif key == 'video_links_content':
+                        # Special processing for video links
+                        video_links_str = ', '.join(value)
+                        processed_data['Discogs_YouTube_Videos'] = video_links_str
+                    else:
+                        # Directly map other keys
+                        processed_data[key] = value
+
+        return processed_data
+    def process_release_data_to_dict_old(self, u_id, release_data):
+        """
+        Processes release data into a dictionary of key-value pairs.
+
+        :param u_id: Unique identifier for the release.
+        :param release_data: Data of the release.
+        :return: Dictionary with structured release data.
+        """
+        # Define the label mapping
+        label_to_column_mapping = {
+            'Label': 'Discogs_Labels',
+            'Format': 'Discogs_Formats',
+            'Country': 'Discogs_Countries',
+            'Released': 'Discogs_Years',
+            'Genre': 'Discogs_Genres',
+            'Style': 'Discogs_Styles'
+        }
+
+        # Initialize the dictionary with u_id and Discogs URL
+        processed_data = {
+            'u_id': u_id,
+            'Discogs_Urls': release_data.get('Discogs_Urls', '')
+        }
+
+        # Process table content
+        for label, value in release_data.get('table_content', {}).items():
+            column_name = label_to_column_mapping.get(label)
+            if column_name:
+                processed_data[column_name] = value
+
+        # Process tracklist content
+        tracklist_str = ', '.join([' - '.join(item) for item in release_data.get('tracklist_content', [])])
+        processed_data['Discogs_Tracklist'] = tracklist_str
+
+        # Process video links content
+        video_links_str = ', '.join(release_data.get('video_links_content', []))
+        processed_data['Discogs_YouTube_Videos'] = video_links_str
+
+        # Extracting artist and title from best_search_release_info if available
+        processed_data['Discogs_Artists'] = release_data.get('best_search_release_info', {}).get('Discogs_Artists', '')
+        processed_data['Discogs_Titles'] = release_data.get('best_search_release_info', {}).get('Discogs_Title', '')
+
+        return processed_data
 
     def set_current_content(self, release_info_dict):
         self.release_table_content = release_info_dict['table_content']
