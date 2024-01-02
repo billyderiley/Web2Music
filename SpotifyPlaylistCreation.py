@@ -53,7 +53,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
         # Example usage
         master_u_ids_list = self.data_handler.get_master_Spotify_Dataframe_u_ids_list()
         dataframe_filter = DataframeFilter(dataframe, master_u_ids_list=master_u_ids_list)
-        u_id_search_items = dataframe_filter.get_search_items(['Discogs_Artists', 'Discogs_Titles'], keep_unique_ids=True)
+        u_id_search_items = dataframe_filter.get_search_items(dataframe,['Discogs_Artists', 'Discogs_Titles'], keep_unique_ids=True)
 
         # Perform batch album search
         aggregated_albums_list = self.sp.batch_album_search(search_items=u_id_search_items)
