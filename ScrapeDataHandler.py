@@ -82,6 +82,16 @@ class DataHandler:
         except FileNotFoundError:
             return None
 
+    def load_Search_Dataframe(self, csv_file):
+        self.Search_Dataframe = self.loadfromCSV(csv_file)
+        self.set_loaded_search_csv_file(csv_file)
+        return self.Search_Dataframe
+
+    def load_Spotify_Dataframe(self, csv_file):
+        self.Spotify_Dataframe = self.loadfromCSV(csv_file)
+        self.set_loaded_spotify_csv_file(csv_file)
+        return self.Spotify_Dataframe
+
     def save_dataframe(self, dataframe, path):
         dataframe.to_csv(path, index=False)
         print(f"DataFrame saved to {path}")
@@ -198,6 +208,7 @@ class DataHandler:
         if self.Spotify_Dataframe is not None:
             # Save the DataFrame to the specified path
             self.Spotify_Dataframe.to_csv(path_or_buf=path, index=False)
+            self.set_loaded_spotify_csv_file(path) # Set the loaded CSV file
             print(f"Spotify DataFrame saved to {path}")
             if update_master_Spotify_Dataframe:
                 self.update_and_save_master_Spotify_Dataframe(self.Spotify_Dataframe)
@@ -251,6 +262,7 @@ class DataHandler:
         """Set the loaded CSV file."""
         self.loaded_search_csv_file = csv_file
 
+    @staticmethod
     def create_new_discogs_dataframe(self, data=None):
         """Create an empty Discogs DataFrame."""
         discogs_dataframe = pd.DataFrame(data if data else None, columns=['u_id','Discogs_Artists', 'Discogs_Titles', 'Discogs_Labels', 'Discogs_Genres', 'Discogs_Styles',
@@ -268,6 +280,7 @@ class DataHandler:
             path = path+'.csv'
         #path = input("Enter a Save name for Dataframe")
         self.Search_Dataframe.to_csv(path_or_buf=path, index=False)
+        self.set_loaded_search_csv_file(path) # Set the loaded CSV file
 
     def update_search_dataframe(self, center_releases_content):
         if center_releases_content is not None:
@@ -301,18 +314,46 @@ class DataHandler:
         if self.Release_Dataframe is not None:
             # Save the DataFrame to the specified path
             self.Release_Dataframe.to_csv(path_or_buf=path, index=False)
+            self.set_loaded_search_csv_file(path) # Set the loaded CSV file
             print(f"Release DataFrame saved to {path}")
         else:
             print("No Release DataFrame to save.")
+
+    def get_release_dataframe_from_search_dataframe_backup(self):
+        """Create a Release DataFrame from the Search DataFrame."""
+        if self.Search_Dataframe is None:
+            print("DataHandler has no Search Dataframe to transform")
+            return
+
+        DiscogsReleaseScrape_obj = DiscogsReleaseScraper(self.Search_Dataframe)
+        DiscogsReleaseScrape_obj.get_release_dataframe_from_search_dataframe()
+        self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
 
     def get_release_dataframe_from_search_dataframe(self):
         """Create a Release DataFrame from the Search DataFrame."""
         if self.Search_Dataframe is None:
             print("DataHandler has no Search Dataframe to transform")
             return
-        DiscogsReleaseScrape_obj = DiscogsReleaseScraper(self.Search_Dataframe)
-        DiscogsReleaseScrape_obj.get_release_dataframe_from_search_dataframe()
+        search_queue = self.find_search_rows_needing_update()
+        release_urls = [row['Discogs_Urls'] for _, row in search_queue]
+
+        # Create a ReleaseBatchSearcher instance and perform batch search
+        release_searcher = DiscogsReleaseScraper()
+        aggregated_results = DiscogsReleaseScraper.batch_search_releases(release_urls)
+
+        # Prepare a dictionary with the index and corresponding release data
+        index_release_data_mapping = {index: release_data for index, release_data in enumerate(aggregated_results)}
+
+
+        for index, row in search_queue:
+            # Add each release data to the DataFrame using the corresponding index
+            release_data = index_release_data_mapping.get(index)
+            if release_data:
+                DiscogsReleaseScrape_obj.add_new_release_to_dataframe(index, release_data)
+
         self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
+        self.save_Release_Dataframe(path=self.loaded_search_csv_file)
+
 
         """if self. Release_Dataframe is None:
             print("DataHandler has no Release Dataframe to transform")
@@ -331,6 +372,106 @@ class DataHandler:
         print("Transformed Search_Dataframe to Release_Dataframe")
         print("Release_Dataframe :")
         print(self.DiscogsReleaseScrape_obj.Release_Dataframe)"""
+
+    def add_new_release_to_dataframe(self, index, release_content):
+        # Check if the release already exists in the DataFrame
+       # if self.is_duplicate(release_content['Discogs_Urls']):
+        #    return  # Avoid adding duplicate entry
+
+        # Update the DataFrame with the new release content by index
+        self.update_release_Dataframe_table_content(index, release_content['table_content'])
+        self.update_release_Dataframe_tracklist_content(index, release_content['tracklist_content'])
+        self.update_release_Dataframe_video_links_content(index, release_content['video_links_content'])
+
+    def update_release_Dataframe_table_content(self, index, release_table_content):
+        """
+        Updates the release DataFrame with content from the release table obtained from the Discogs page.
+
+        :param index: The index in the DataFrame where the release content needs to be updated.
+        :type index: int
+        :param release_table_content: A dictionary containing key-value pairs of release information.
+                                      Keys are labels like 'Label', 'Format', etc., and values are their corresponding details.
+        :type release_table_content: dict
+        """
+
+        # Define a mapping between the label names from the release table content and the DataFrame column names
+        label_to_column_mapping = {
+            'Label': 'Discogs_Labels',
+            'Format': 'Discogs_Formats',
+            'Country': 'Discogs_Countries',
+            'Released': 'Discogs_Years',
+            'Genre': 'Discogs_Genres',
+            'Style': 'Discogs_Styles',
+            'Tracklist': 'Discogs_Tracklist',
+            # Additional mappings can be added here as needed
+        }
+
+        # Initialize a dictionary to store updates for the DataFrame row
+        row_updates = {}
+
+        # Iterate over the items in the release_table_content dictionary
+        for info_label, info in release_table_content.items():
+            # Find the corresponding column name in the DataFrame for the given label
+            column_name = label_to_column_mapping.get(info_label)
+            print(column_name)
+            print(info)
+            if not info:
+                continue
+
+            # If a column name is found in the mapping
+            if column_name:
+                # Update the row_updates dictionary with the new information
+                row_updates[column_name] = info
+
+        # Iterate over the items in the row_updates dictionary
+        for key, value in row_updates.items():
+            print(key)
+            print(value)
+            # Update the corresponding column of the DataFrame at the specified index with the new value
+            self.Release_Dataframe.at[index, key] = value
+
+        # Check if any columns in the row are still blank
+        blank_columns = self.Release_Dataframe.columns[self.Release_Dataframe.iloc[index].isnull()]
+
+        # Iterate over the blank columns and see if row_updates has information for them
+        for column in blank_columns:
+            if column in row_updates:
+                # If row_updates has information for this column, update the DataFrame again
+                self.Release_Dataframe.at[index, column] = row_updates[column]
+
+
+    def update_release_Dataframe_tracklist_content(self, index, release_tracklist_content):
+        # Convert each inner list to a string and then join all strings
+        tracklist_str = ', '.join([' - '.join(item) for item in release_tracklist_content])
+        # Assign the string to the DataFrame
+        self.Release_Dataframe.at[index, 'Discogs_Tracklist'] = tracklist_str
+
+    def update_release_Dataframe_video_links_content(self, index, release_video_links_content):
+        # Convert video links list to a single string format
+        video_links_str = ', '.join(release_video_links_content)
+        self.Release_Dataframe.at[index, 'Discogs_YouTube_Videos'] = video_links_str
+
+
+    def is_duplicate(self, discogs_url):
+        # Assuming 'Discogs_URLS' is a unique identifier for each release
+        #url = table_content.get('Discogs_URLS')
+        if discogs_url in self.Release_Dataframe['Discogs_Urls'].values:
+            return True
+        return False
+
+    def find_search_rows_needing_update(self):
+        # Identify rows that need more information
+        search_queue = []
+        for index, row in self.Search_Dataframe.iterrows():
+            if pd.isnull(row['Discogs_Genres']) or pd.isnull(row['Discogs_Styles']) or \
+                    pd.isnull(row['Discogs_Countries']) or pd.isnull(row['Discogs_Years']) or \
+                    pd.isnull(row['Discogs_Tracklist']) or pd.isnull(row['Discogs_Labels']):
+                if 'Discogs_Urls' in row and pd.notnull(row['Discogs_Urls']):
+                    search_queue.append((index, row['Discogs_Urls']))
+                    # store the index of the row and the Discogs URL
+
+
+        return search_queue
 
     def update_release_dataframe_with_release_info(self, release_info_dict):
         """Update the Release DataFrame with release info."""
@@ -387,24 +528,6 @@ class DataHandler:
         spotify_dataframe = pd.DataFrame(data if data else None,
                                          columns=['u_id'])
         return spotify_dataframe
-
-class DataFrameUtility:
-    @staticmethod
-    def clean_and_split(x):
-        """
-        Splits the string by comma and strips spaces from each element.
-
-        :param x: The string to be split and cleaned.
-        :return: A list of cleaned strings.
-        """
-        return [val.strip() for val in str(x).split(',')]
-
-    @staticmethod
-    def divide_into_batches( dataframe, batch_size):
-        # Split the DataFrame into smaller batches
-        batches = [dataframe.iloc[i:i + batch_size] for i in range(0, len(dataframe), batch_size)]
-        return batches
-
 
 
     """def find_missing_data(self):

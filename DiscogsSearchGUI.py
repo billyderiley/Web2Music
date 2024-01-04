@@ -38,9 +38,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         csv_files = self.data_handler.list_csv_files()
         selected_file = self.user_interaction.select_csv_file(csv_files)
         if selected_file:
-            search_df = self.data_handler.load_data(selected_file)
-            self.data_handler.set_search_dataframe(search_df)
-            self.data_handler.set_loaded_search_csv_file(selected_file)
+            self.data_handler.load_Search_Dataframe(selected_file)
             print(f"Search DataFrame loaded from {selected_file}")
 
     def user_interaction_load_search_dataframe_backup(self):
@@ -58,7 +56,6 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             print(f"Search DataFrame loaded from {csv_files[file_index]}")
         else:
             print("Invalid file number.")
-
 
 
     def start_up_search(self):

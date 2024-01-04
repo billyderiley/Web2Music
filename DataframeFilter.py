@@ -2,9 +2,7 @@ import pandas as pd
 import random
 import string
 from collections import Counter
-from ScrapeDataHandler import DataHandler
 from UserInteraction import UserInteraction
-from ScrapeDataHandler import DataFrameUtility
 import Levenshtein as lv
 
 
@@ -444,3 +442,24 @@ class DataframeFilter(UserInteraction):
         if str1 is None or str2 is None:
             return 0  # Return 0 similarity if either string is None
         return lv.ratio(str(str1).lower(), str(str2).lower())
+
+
+
+
+class DataFrameUtility:
+    @staticmethod
+    def clean_and_split(x):
+        """
+        Splits the string by comma and strips spaces from each element.
+
+        :param x: The string to be split and cleaned.
+        :return: A list of cleaned strings.
+        """
+        return [val.strip() for val in str(x).split(',')]
+
+    @staticmethod
+    def divide_into_batches( dataframe, batch_size):
+        # Split the DataFrame into smaller batches
+        batches = [dataframe.iloc[i:i + batch_size] for i in range(0, len(dataframe), batch_size)]
+        return batches
+

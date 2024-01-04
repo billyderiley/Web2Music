@@ -117,10 +117,7 @@ class DiscogsBatchSearcher:
 class DiscogsBatchSearch(DiscogsBatchSearcher):
     def __init__(self, data_handler):
         DiscogsBatchSearcher.__init__(self)
-        if not data_handler:
-            self.data_handler = DataHandler()  # Assuming DataHandler is already defined
-        else:
-            self.data_handler = data_handler
+
 
 
     def process_search_and_update(self, dataframe, search_columns: list):
@@ -145,7 +142,7 @@ class DiscogsBatchSearch(DiscogsBatchSearcher):
                 processed_release_data = self.Discogs_Release_Scraper.process_release_data_to_dict(u_id, release_data, best_search_release_info)
 
                 release_data_list.append(processed_release_data)
-            df = self.data_handler.create_new_discogs_dataframe(release_data_list)
+            df = self.Discogs_Release_Scraper.create_Release_Dataframe(release_data_list)
             #self.data_handler.save_dataframe(df, 'release_data_test.csv')
             return df
 
@@ -161,3 +158,36 @@ class DiscogsBatchSearch(DiscogsBatchSearcher):
         df_filter = DataframeFilter(dataframe)
         search_items = df_filter.get_search_items(dataframe=dataframe ,search_columns=search_columns,  keep_unique_ids=True, master_u_ids_list=self.data_handler.master_u_id_Dataframe['u_id'].tolist())
         return search_items
+
+
+class ReleaseBatchSearcher:
+    def __init__(self):
+        self.Discogs_Release_Scraper = DiscogsReleaseScraper()
+
+    def batch_search_releases(self, release_urls):
+        """
+        Performs a batch search on Discogs for release URLs.
+
+        :param release_urls: A list of Discogs release URLs.
+        :return: A list of release_data results.
+        """
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # Create a future object for each release URL
+            futures = [executor.submit(self.fetch_release_data, release_url)
+                       for release_url in release_urls]
+
+            # Collect the results as they complete
+            results = [future.result() for future in as_completed(futures)]
+
+        return results
+
+    def fetch_release_data(self, release_url):
+        """
+        Fetches release data for a specific Discogs release URL.
+
+        :param release_url: The Discogs release URL.
+        :return: Release data.
+        """
+        # Fetch release data from the release URL
+        release_data = self.Discogs_Release_Scraper.get_current_release_url_content(release_url)
+        return release_data
