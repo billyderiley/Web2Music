@@ -48,12 +48,12 @@ class DiscogsSearchScraper(BaseScraper):
         """
 
     def get_search_url_content_dict(self, ):
-        aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by_dict = self.get_current_search_page_content()
+        aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by = self.get_current_search_page_content()
         current_search_url_info_dict = {
             'Discogs_Urls': self.current_url,
             'aside_navbar_content': aside_navbar_content,
             'center_releases_content': center_releases_content,
-            'sort_by_dict': sort_by_dict,
+            'sort_by': sort_by,
         }
         return current_search_url_info_dict
 
@@ -86,13 +86,14 @@ class DiscogsSearchScraper(BaseScraper):
         #Base_Scraper = BaseScraper()
         SoupObj = self.get_Soup_from_url(base_url)
         aside_navbar_content, applied_filters, new_applied_filters_list = self.get_aside_navbar_content(SoupObj)
-        sort_by_dict = self.get_sort_by_dict(SoupObj)
+        sort_by = self.get_sort_by(SoupObj)
+        self.sort_by = sort_by
         #self.updateAppliedFilters(self.getAppliedFiltersFromUrl(self.current_url))
         center_releases_content = self.get_center_releases_content(SoupObj)
         # aside_navbar_content
         # center_releases_content
         # applied_filters
-        return aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by_dict
+        return aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by
 
     def get_aside_navbar_content(self, SoupObj):
         #print("testing_aside_navbar_content")
@@ -191,12 +192,14 @@ class DiscogsSearchScraper(BaseScraper):
                         "Discogs_Artists": artist,
                         "Discogs_Titles": title,
                         "Discogs_Urls": self.base_discogs_url+href,
-                        "Discogs_Search_Filters": ', '.join(self.applied_filters)
+                        # add the applied filters seperated by commas, then add the sort by term to the search filters
+                        "Discogs_Search_Filters": ','.join(self.applied_filters) + (f",sort={next(iter(self.sort_by['Selected']))}" if self.sort_by['Selected'] else ''),
+
                     }
                     center_releases_content.append(release_info)
         return center_releases_content
 
-    def get_sort_by_dict(self, SoupObj):
+    def get_sort_by(self, SoupObj):
         sort_by_dict = {'Selected': {}, 'Options': {}}
 
         sort_by = SoupObj.find('select', id='sort_top')
@@ -210,6 +213,7 @@ class DiscogsSearchScraper(BaseScraper):
                     #print('here')
                     sort_by_dict['Options'][option.text] = option['value']
         #print(sort_by_dict)
+
         return sort_by_dict
 
     def getDiscogsUrl(self,href):
@@ -402,7 +406,6 @@ class DiscogsSearchScraper(BaseScraper):
                 # return flat_list
             return applied_filters
 
-
     def get_sorted_url(self, current_url, new_sort_by):
         print("now here")
         print(new_sort_by)
@@ -426,7 +429,6 @@ class DiscogsSearchScraper(BaseScraper):
                 print(updated_url)
 
         return updated_url
-
 
     def get_search_options(self):
         print("here are the options you can search")

@@ -24,7 +24,7 @@ class DiscogsReleaseScraper(BaseScraper):
         self.current_url = None
 
     # Updated usage in your get_release_dataframe_from_search_dataframe method:
-    def get_release_dataframe_from_search_dataframe_backup(self):
+    """def get_release_dataframe_from_search_dataframe_backup(self):
         search_queue = self.find_search_rows_needing_update()
         release_urls = [row['Discogs_Urls'] for _, row in search_queue]
 
@@ -39,16 +39,16 @@ class DiscogsReleaseScraper(BaseScraper):
             # Add each release data to the DataFrame using the corresponding index
             release_data = index_release_data_mapping.get(index)
             if release_data:
-                self.add_new_release_to_dataframe(index, release_data)
+                self.add_new_release_to_dataframe(index, release_data)"""
 
-    def get_release_dataframe_from_search_dataframe_backup(self):
+    """def get_release_dataframe_from_search_dataframe_backup(self):
         search_queue = self.find_search_rows_needing_update()
         rows = []
         #discogs_url_to_update = self.Search_Dataframe['Discogs_Urls'][self.Search_Dataframe['Discogs_Genres'].notnull()].tolist()
         for i, r in search_queue:
             rows.append(r)
             #self.navigate_to_release_url(r)
-        self.execute_in_batches(rows, action=self.navigate_to_release_url, batch_size=15)
+        self.execute_in_batches(rows, action=self.navigate_to_release_url, batch_size=15)"""
 
     def navigate_to_release_url(self, url):
         print(f"Processing {url}")
@@ -57,8 +57,6 @@ class DiscogsReleaseScraper(BaseScraper):
         #self.send_content_to_dataframe(release_info_dict)
         index = self.Search_Dataframe[self.Search_Dataframe['Discogs_Urls'] == url].index[0]
         self.add_new_release_to_dataframe(index, release_info_dict)
-
-
 
     def get_current_release_url_content(self, url):
         SoupObj = self.get_Soup_from_url(url)

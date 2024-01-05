@@ -154,7 +154,7 @@ class DatabaseManager:
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    def execute_in_batches(self, urls, action, batch_size=5):
+    def execute_in_batches_backup(self, urls, action, batch_size=5):
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             # Submit each URL to the executor
             future_to_url = {executor.submit(action, url): url for url in urls}

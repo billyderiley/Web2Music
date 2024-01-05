@@ -104,28 +104,28 @@ class SpotifyPlaylistCreation(SpotifyScraper):
 
         # Perform batch album search
         aggregated_albums_list = self.sp.batch_album_search(search_items=u_id_search_items)
-        print(f"{len(aggregated_albums_list)} albums found out of {len(u_id_search_items)}")
+        #print(f"{len(aggregated_albums_list)} albums found out of {len(u_id_search_items)}")
 
         track_uris_list = []
         track_uris_set = set()
         track_metadata_list = []
         # iterate through the aggregated albums keys and get the values
-        print(f"check here")
-        print(aggregated_albums_list)
+        #print(f"check here")
+        #print(aggregated_albums_list)
         for album_tuple in aggregated_albums_list:
-            print(album_tuple)
+            #print(album_tuple)
             u_id = album_tuple[0]
             album = album_tuple[1]
-            print(u_id, album)
+            #print(u_id, album)
 
 
             for track in album['album_tracks']:
 
-                print(track)
+                #print(track)
                 if track['uri'] not in track_uris_set:
                     track_uris_set.add(track['uri'])
                     track_uris_list.append(track['uri'])
-                    print(f"Added track: {track['name']}")
+                    #print(f"Added track: {track['name']}")
                     track_metadata = self.get_spotify_metadata_from_track(track,u_id=u_id, album_name=album['album_name'],
                                                                       album_release_date=album['album_release_date'],
                                                                       album_artists=album['album_artists'],
@@ -142,7 +142,7 @@ class SpotifyPlaylistCreation(SpotifyScraper):
             if "," in artist:
                 artist = artist.split(",")[0]
             query = f"artist:{artist} {search_type}:{title}"
-            print(f"Searching Spotify with query: {query}")  # Debugging info
+            #print(f"Searching Spotify with query: {query}")  # Debugging info
 
             retries = 0
             while retries < max_retries:

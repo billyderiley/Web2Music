@@ -64,7 +64,7 @@ class DataHandler:
         self.master_Discogs_Dataframe = (
             self.loadfromCSV(self.master_Discogs_Dataframe_path)) \
             if os.path.exists(self.master_Discogs_Dataframe_path) \
-            else self.create_new_discogs_dataframe()
+            else DataHandler.create_new_discogs_dataframe()
 
 
 
@@ -263,7 +263,7 @@ class DataHandler:
         self.loaded_search_csv_file = csv_file
 
     @staticmethod
-    def create_new_discogs_dataframe(self, data=None):
+    def create_new_discogs_dataframe(data=None):
         """Create an empty Discogs DataFrame."""
         discogs_dataframe = pd.DataFrame(data if data else None, columns=['u_id','Discogs_Artists', 'Discogs_Titles', 'Discogs_Labels', 'Discogs_Genres', 'Discogs_Styles',
                                                 'Discogs_Countries', 'Discogs_Years', 'Discogs_Search_Filters', 'Discogs_Urls',
@@ -329,49 +329,14 @@ class DataHandler:
         DiscogsReleaseScrape_obj.get_release_dataframe_from_search_dataframe()
         self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
 
-    def get_release_dataframe_from_search_dataframe(self):
-        """Create a Release DataFrame from the Search DataFrame."""
+    def get_deep_search_dataframe(self):
+
         if self.Search_Dataframe is None:
             print("DataHandler has no Search Dataframe to transform")
             return
-        search_queue = self.find_search_rows_needing_update()
-        release_urls = [row['Discogs_Urls'] for _, row in search_queue]
+        filtered_df = self.find_search_rows_needing_update()
+        return filtered_df
 
-        # Create a ReleaseBatchSearcher instance and perform batch search
-        release_searcher = DiscogsReleaseScraper()
-        aggregated_results = DiscogsReleaseScraper.batch_search_releases(release_urls)
-
-        # Prepare a dictionary with the index and corresponding release data
-        index_release_data_mapping = {index: release_data for index, release_data in enumerate(aggregated_results)}
-
-
-        for index, row in search_queue:
-            # Add each release data to the DataFrame using the corresponding index
-            release_data = index_release_data_mapping.get(index)
-            if release_data:
-                DiscogsReleaseScrape_obj.add_new_release_to_dataframe(index, release_data)
-
-        self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
-        self.save_Release_Dataframe(path=self.loaded_search_csv_file)
-
-
-        """if self. Release_Dataframe is None:
-            print("DataHandler has no Release Dataframe to transform")
-            return
-        else:
-            if center_releases_inner_content is not None:
-                if isinstance(center_releases_inner_content, list):
-                    # Convert the list of dictionaries to a DataFrame
-                    new_df = pd.DataFrame(center_releases_inner_content, columns=['Discogs_Titles','Discogs_Artists', 'Discogs_Tracklist', 'Discogs_Labels', 'Discogs_Genres'
-            , 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years', 'Discogs_Formats','Discogs_Urls', 'Discogs_YouTube_Videos'])
-                #self.DiscogsReleaseScrape_obj = DiscogsReleaseScraper()
-                for index, row in self.Search_Dataframe.iterrows():
-                    url = row['Discogs_Urls']
-                    current_url_release_info_dict = self.DiscogsReleaseScrape_obj.get_current_release_url_content(url)
-                    self.DiscogsReleaseScrape_obj.add_new_release(current_url_release_info_dict)
-        print("Transformed Search_Dataframe to Release_Dataframe")
-        print("Release_Dataframe :")
-        print(self.DiscogsReleaseScrape_obj.Release_Dataframe)"""
 
     def add_new_release_to_dataframe(self, index, release_content):
         # Check if the release already exists in the DataFrame
@@ -460,6 +425,23 @@ class DataHandler:
         return False
 
     def find_search_rows_needing_update(self):
+        """
+        Identify rows in the Search DataFrame that need more information.
+        :return: DataFrame - Filtered DataFrame with rows needing updates.
+        """
+        # Define columns to check for missing values
+        columns_to_check = ['Discogs_Genres', 'Discogs_Styles', 'Discogs_Countries', 'Discogs_Years',
+                            'Discogs_Tracklist', 'Discogs_Labels']
+
+        # Check if any of the specified columns have missing values
+        missing_info = self.Search_Dataframe[columns_to_check].isnull().any(axis=1)
+
+        # Filter rows where 'Discogs_Urls' is not null and other info is missing
+        filtered_df = self.Search_Dataframe[missing_info & self.Search_Dataframe['Discogs_Urls'].notnull()]
+
+        return filtered_df
+
+    def find_search_rows_needing_update_backup(self):
         # Identify rows that need more information
         search_queue = []
         for index, row in self.Search_Dataframe.iterrows():

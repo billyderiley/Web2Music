@@ -5,6 +5,8 @@ from SpotifyPlaylistCreation import SpotifyPlaylistCreation
 from DataframeFilter import DataframeFilter
 from UserInteraction import UserInteraction
 from DiscogsBatchSearcher import DiscogsBatchSearch
+from DiscogsBatchSearcher import BatchSearcher
+from DiscogsBatchSearcher import ReleaseBatchSearcher
 
 import time
 
@@ -75,7 +77,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         self.search_url_content_dict = self.get_search_url_content_dict()
         self.updateSearchOptions(aside_navbar_content=self.search_url_content_dict['aside_navbar_content'])
         self.updateCenterReleasesContent(self.search_url_content_dict['center_releases_content'])
-        self.updateSortByDict(self.search_url_content_dict['sort_by_dict'])
+        self.updateSortBy(self.search_url_content_dict['sort_by'])
         if update_dataframes is True:
             self.updateDataFrame()
 
@@ -91,8 +93,8 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
     def updateDataFrame(self):
         self.data_handler.update_search_dataframe(self.center_releases_content)
 
-    def updateSortByDict(self, sort_by_dict):
-        self.sort_by_dict = sort_by_dict
+    def updateSortBy(self, sort_by):
+        self.sort_by = sort_by
 
     def user_interaction_menu(self):
         # Initialize user input variable
@@ -177,7 +179,7 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         new_search_term_1 = self.search_dict_get_search_term(label_type, enter_key2)
         new_discogs_search_url = self.base_discogs_url + new_search_term_1
 
-        self.navigate_to_search_url(new_discogs_search_url)
+        self.navigate_to_search_url(new_discogs_search_url, update_dataframes=False)
 
     """def user_interaction_update_sort_by(self):
         if self.current_url == self.start_url:
@@ -197,11 +199,11 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             self.start_up_search()
 
         # Print the selected option
-        selected_option = self.sort_by_dict.get('Selected', 'None Selected')
+        selected_option = self.sort_by.get('Selected', 'None Selected')
         print(f"Selected: {selected_option}")
 
         # Print the options with numbers
-        options = self.sort_by_dict.get('Options', {})
+        options = self.sort_by.get('Options', {})
         for i, (key, value) in enumerate(options.items(), start=1):
             print(f"{i}: {key}")
 
@@ -330,7 +332,12 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
         page_number_input = input("Enter a page number, or range (number seperated by a space)")
         search_pages = self.get_page_range(self.current_url, page_number_input, max_page_number)
         # Use execute_in_batches to process each URL in search_pages
-        self.execute_in_batches(urls=search_pages, action=self.navigate_to_search_url)
+        #self.execute_in_batches(urls=search_pages, action=self.navigate_to_search_url)
+        Discogs_Batch_Search = DiscogsBatchSearch(data_handler=self.data_handler)
+        Discogs_Batch_Search.process_search_page_filters_and_update(search_urls=search_pages)
+        self.data_handler = Discogs_Batch_Search.data_handler
+
+        #_ = self.execute_in_batches(urls=search_pages, action=self.fetch_search_page_content)
 
         """for search_page_url in search_pages:
             time.sleep(0.5)
@@ -348,8 +355,11 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             return
 
         # initialize DiscogsReleaseScraper object with DataHandler instance
-        self.data_handler.get_release_dataframe_from_search_dataframe()
+        self.Release_Batch_Search = ReleaseBatchSearcher(data_handler=self.data_handler)
+        self.Release_Batch_Search.process_release_search_queue_from_dataframe(self.data_handler.get_deep_search_dataframe())
+        self.data_handler = self.Release_Batch_Search.data_handler
         self.data_handler.save_Release_Dataframe(path=self.data_handler.loaded_search_csv_file)
+
 
     def user_interaction_filter_dataframe(self):
         #path = '/Users/Billy/Documents/Documents – Billy’s MacBook Pro (2)/Projects/Web2Music/HardcoreReggaeton.csv_ReleaseDataframe.csv'
