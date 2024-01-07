@@ -356,9 +356,22 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
 
         # initialize DiscogsReleaseScraper object with DataHandler instance
         self.Release_Batch_Search = ReleaseBatchSearcher(data_handler=self.data_handler)
-        self.Release_Batch_Search.process_release_search_queue_from_dataframe(self.data_handler.get_deep_search_dataframe())
+        self.Release_Batch_Search.process_release_search_queue_from_dataframe(self.data_handler.get_deep_search_dataframe(), batch_size=10)
         self.data_handler = self.Release_Batch_Search.data_handler
         self.data_handler.save_Release_Dataframe(path=self.data_handler.loaded_search_csv_file)
+
+        self.data_handler.get_expanded_tracklist_search_dataframe()
+        self.data_handler.save_Release_Dataframe(path=self.data_handler.loaded_search_csv_file)
+
+        """# Ask user if they want to expand the Release Dataframe by tracklist
+        expand_tracklist = input("Do you want to expand the Release Dataframe by tracklist? (Y/N): ")
+        if expand_tracklist.lower() == 'y':
+            self.data_handler.get_expanded_tracklist_search_dataframe()
+            self.data_handler.save_Release_Dataframe(path=self.data_handler.loaded_search_csv_file)
+        elif expand_tracklist.lower() == 'n':
+            pass"""
+
+
 
 
     def user_interaction_filter_dataframe(self):

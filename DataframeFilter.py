@@ -364,15 +364,11 @@ class DataframeFilter(UserInteraction):
             return []
 
         search_items = []
-        print(search_columns)
-        print(len(dataframe))
-        print(dataframe.shape)
+
         for _, row in dataframe.iterrows():
             item = tuple(DataframeFilter.normalize_str([row[column] for column in search_columns]))
             #item = tuple(self.remove_url_unfriendly_characters(str(row[column])) for column in search_columns)
-            print(f"item: {item}")
             search_items.append(item)
-        print(f"search_items: {search_items}")
         return search_items
 
     @staticmethod
@@ -462,4 +458,21 @@ class DataFrameUtility:
         # Split the DataFrame into smaller batches
         batches = [dataframe.iloc[i:i + batch_size] for i in range(0, len(dataframe), batch_size)]
         return batches
+
+    class DataFrameReducer:
+        def __init__(self, dataframe, unique_id_column, column_to_reduce, reduction_function):
+            self.dataframe = dataframe
+            self.unique_id_column = unique_id_column
+            self.column_to_reduce = column_to_reduce
+            self.reduction_function = reduction_function
+            self.reduced_dataframe = None
+
+        def reduce(self):
+            # Group by the unique ID column and apply the reduction function to the specified column
+            self.reduced_dataframe = self.dataframe.groupby(self.unique_id_column)[self.column_to_reduce].apply(
+                self.reduction_function).reset_index()
+            return self.reduced_dataframe
+
+        def get_reduced_dataframe(self):
+            return self.reduced_dataframe
 

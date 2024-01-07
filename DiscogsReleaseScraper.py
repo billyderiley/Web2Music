@@ -147,6 +147,7 @@ class DiscogsReleaseScraper(BaseScraper):
 
         # Process tracklist content
         tracklist_str = ', '.join([' - '.join(item) for item in release_data.get('tracklist_content', [])])
+
         processed_data['Discogs_Tracklist'] = tracklist_str
 
         # Process video links content
@@ -183,6 +184,91 @@ class DiscogsReleaseScraper(BaseScraper):
             self.add_new_release(release_content)"""
 
     def get_release_tracklist_content(self, SoupObj):
+        """
+        Extracts the tracklist content from a BeautifulSoup object of a Discogs release page.
+
+        :param SoupObj: A BeautifulSoup object representing the parsed HTML of a Discogs release page.
+        :type SoupObj: BeautifulSoup
+        """
+        release_tracklist_content = []
+
+        # Find the primary artist link; use 'Various' if not found
+        artist_link = SoupObj.find('a', class_='link_1ctor link_15cpV')
+        primary_artist = artist_link.text if artist_link else 'Various'
+
+        # Find the tracklist table (considering both possible class names)
+        table = SoupObj.find('table', class_="tracklist_3QGRS") or SoupObj.find('table', class_="tracklist_4KOvL")
+        if not table:
+            return release_tracklist_content  # Return empty list if tracklist table is not found
+
+        # Iterate through each track row in the table
+        counter = 0
+        for tr in table.find_all('tr'):
+            if tr.class_ == 'heading_24HyI':
+                continue
+            counter += 1
+            # Find and clean the artist's name, fallback to primary artist if not present
+            artist_line = tr.find('td', class_='artist_1mUch') or tr.find('td', class_='artist_3zAQD')
+            if not artist_line:
+                artist = primary_artist
+            else:
+                artist = artist_line.text.strip()
+                if not artist or artist == '' or artist == ' ':
+                    artist = primary_artist
+
+
+            # Find and clean the track name, considering different classes
+            track_name_line = tr.find('td', class_='trackTitleWithArtist_3ZfhC') or \
+                              tr.find('td', class_='trackTitle_CTKp4') or \
+                              tr.find('td', class_='trackTitleNoArtist_ANE8Q')
+            track_name = track_name_line.text.strip() if track_name_line else "Unknown Track"
+
+            # Find and clean the duration, use "Unknown Duration" if not present
+            duration_line = tr.find('td', class_='duration_25zMZ') or \
+                            tr.find('td', class_='duration_2t4qr') or \
+                            tr.find('td', class_='duration_2HJZf') or \
+                            tr.find('td', class_='duration_3JAzI')
+            duration = duration_line.text.strip() if duration_line else ""
+
+            # Find and clean the track position
+            track_position_line = tr.find('td', class_='trackPos_2RCje')
+            track_position = track_position_line.text.strip() if track_position_line else str(counter)
+
+            # Convert positions like A, B, A1, A2, etc. into the counter value
+            if track_position.isdigit():
+                track_position = str(track_position)
+            else:
+                track_position = str(counter)  # Use the current counter value for non-numeric positions
+
+            #remove any starting or trailing - from duration, artist, and track_name
+            duration, artist, track_name, track_position = self.clean_strings(duration, artist, track_name, track_position)
+
+            # cd symbol representing home directory in mac
+            home = os.path.expanduser('~')
+
+            # Append artist, track name, and duration to the content list
+            release_tracklist_content.append([artist, track_name, duration, track_position])
+
+        return release_tracklist_content
+
+    @staticmethod
+    def clean_strings(duration, artist, track_name, track_position):
+        while any(word.startswith('-') or word.endswith('-') or word.startswith(' ') or word.endswith(' ')
+            or word.startswith('–') or word.endswith('–')
+                  for word in
+                  [duration, artist, track_name, track_position]):
+            duration = duration.lstrip('-').rstrip('-').lstrip(" ").rstrip(" ").strip()
+            duration = duration.lstrip('–').rstrip('–').lstrip(" ").rstrip(" ").strip().strip("–")
+            artist = artist.lstrip('-').rstrip('-').strip().lstrip(" ").rstrip(" ").strip()
+            artist = artist.lstrip('–').rstrip('–').strip().lstrip(" ").rstrip(" ").strip().strip("–")
+            track_name = track_name.lstrip('-').rstrip('-').strip().lstrip(" ").rstrip(" ").strip()
+            track_name = track_name.lstrip('–').rstrip('–').strip().lstrip(" ").rstrip(" ").strip().strip("–")
+            track_position = track_position.lstrip('-').rstrip('-').strip().lstrip(" ").rstrip(" ").strip()
+            track_position = track_position.lstrip('–').rstrip('–').strip().lstrip(" ").rstrip(" ").strip().strip("–")
+            print(artist)
+        return duration, artist, track_name, track_position
+
+    def get_release_tracklist_content_backup(self, SoupObj):
         """
         Extracts the tracklist content from a BeautifulSoup object of a Discogs release page.
 
@@ -264,13 +350,10 @@ class DiscogsReleaseScraper(BaseScraper):
         for tr in table.find_all('tr'):
             th = tr.find('th')
             td = tr.find('td')
-            print(th.text)
-            print(td.text)
             if th:
                 info_label = th.text.rstrip(":")
                 info = td.text if td else 'Unknown Info'
                 release_table_content[info_label] = info
-        print(release_table_content)
         return release_table_content
 
 
@@ -304,7 +387,14 @@ class DiscogsReleaseScraper(BaseScraper):
                 youtube_video_id = self.extract_youtube_id(img_tag['src'])
                 if youtube_video_id:
                     youtube_video_url = 'https://www.youtube.com/watch?v=' + youtube_video_id
-                    release_video_links_content.append(youtube_video_url)
+                    youtube_video_title = video.find('div', class_='title_26yzZ') if video.find('div',
+                                                                                                 class_='title_26yzZ') else video.find('div',
+                                                                                                                                       class_='title_3aPZV')
+                    if youtube_video_title:
+                        youtube_video_title=youtube_video_title.text.strip()
+
+
+                    release_video_links_content.append((youtube_video_title, youtube_video_url))
 
         return release_video_links_content
 
