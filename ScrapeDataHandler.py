@@ -443,8 +443,31 @@ class DataHandler(MasterUIDUniverse):
 
         return new_df
 
-
     def match_youtube_videos(self, track_name, youtube_videos):
+        if not isinstance(track_name, str) or not isinstance(youtube_videos, str):
+            # existing error handling code...
+            pass
+
+        # Split the list of videos into individual video strings
+        video_pairs = youtube_videos.split(' | ') if youtube_videos else []
+
+        # Extract video titles and URLs
+        video_titles = [pair.split(',')[0] for pair in video_pairs]
+
+        # Check if video_titles is not empty
+        if video_titles:
+            # Use difflib to get the closest matching in video titles, and return as many as found above cutoff
+            closest_match_titles = difflib.get_close_matches(track_name, video_titles, n=len(video_titles), cutoff=0.5)
+
+            # Find the indexes of the matching titles
+            match_indexes = [video_titles.index(title) for title in closest_match_titles]
+
+            # Return the full video pairs (titles, URL) for all the closest matches
+            return [video_pairs[index] for index in match_indexes] if match_indexes else None
+        else:
+            return None
+
+    def match_youtube_videos_old(self, track_name, youtube_videos):
         if not isinstance(track_name, str) or not isinstance(youtube_videos, str):
             if youtube_videos == ' ':
                 return None

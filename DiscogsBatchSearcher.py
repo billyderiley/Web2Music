@@ -237,7 +237,7 @@ class ReleaseBatchSearcher(DiscogsBatchSearcher):
         DiscogsBatchSearcher.__init__(self)
         self.data_handler = data_handler
 
-    def process_release_search_queue_from_dataframe(self, filtered_df, batch_size=5):
+    def process_release_search_queue_from_dataframe(self, filtered_df, batch_size=10):
         # Prepare index and URL pairs for batch search
         index_url_pairs = [(index, row['Discogs_Urls']) for index, row in filtered_df.iterrows() if
                            'Discogs_Urls' in row]

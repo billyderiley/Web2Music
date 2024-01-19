@@ -9,6 +9,7 @@ class DatabaseManager:
     def __init__(self, db_path='soup_urls.db'):
         self.db_path = db_path
         self.create_db_tables()
+        self.remove_old_entries()
 
     def create_db_tables(self):
         conn = sqlite3.connect(self.db_path)
@@ -99,8 +100,6 @@ class DatabaseManager:
     
     
     """
-
-
 
     def create_db_table(self):
         conn = sqlite3.connect(self.db_path)
@@ -250,5 +249,32 @@ class DatabaseManager:
             INSERT INTO spotify_response_log (entity_type, entity_data) 
             VALUES (?, ?)""",
                        (entity_type, pickle.dumps(entity_data)))
+        conn.commit()
+        conn.close()
+
+
+    """
+    Database Maintainer
+    """
+
+    def remove_old_entries(self):
+        """
+        Removes entries from all tables in the database that are older than one day.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Get the names of all tables in the database
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cursor.fetchall()
+
+        # For each table, delete rows where the timestamp is older than one day
+        for table in tables:
+            table_name = table[0]
+            cursor.execute(f"""
+                DELETE FROM {table_name}
+                WHERE timestamp < datetime('now', '-1 day')
+            """)
+
         conn.commit()
         conn.close()
