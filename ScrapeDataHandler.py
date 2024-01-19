@@ -1,17 +1,12 @@
-from DiscogsSearchScraper import DiscogsSearchScraper
-from DiscogsReleaseScraper import DiscogsReleaseScraper
 from SpotifyScraper import SpotifyScraper
-from DataframeFilter import DataframeFilter
 import pandas as pd
 import os
 from datetime import datetime
-import time
-import random
-import string
 import difflib
+from Master_u_ID_Universe import MasterUIDUniverse
+import logging
 
-
-class DataHandler:
+class DataHandler(MasterUIDUniverse):
 
     @staticmethod
     def save_dataframe(dataframe, save_as_file_name):
@@ -23,14 +18,6 @@ class DataHandler:
         print(f"Data loaded from {csv_file}")
         return df
 
-    """@staticmethod
-    def list_csv_files():
-        print("Available CSV files:")
-        csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
-        for idx, file in enumerate(csv_files, 1):
-            print(f"{idx}. {file}")
-        return csv_files
-    """
     @staticmethod
     def list_csv_files():
         print("Available CSV files:")
@@ -45,11 +32,15 @@ class DataHandler:
 
     def __init__(self, Search_Dataframe = None, Release_Dataframe = None, Spotify_Dataframe = None,
                  loaded_search_csv_file = None,  loaded_spotify_csv_file = None):
+        super().__init__()
         self.Search_Dataframe = Search_Dataframe
         self.Release_Dataframe = Release_Dataframe
         self.Spotify_Dataframe = Spotify_Dataframe
         self.loaded_search_csv_file = loaded_search_csv_file
         self.loaded_spotify_csv_file = loaded_spotify_csv_file
+
+        # Not sure if this is needed
+        self.Track_Release_Dataframe = None
 
         self.master_u_id_Dataframe_path = "master_u_id_Dataframe.csv"
         self.master_u_id_Dataframe = (
@@ -68,16 +59,6 @@ class DataHandler:
             self.loadfromCSV(self.master_Discogs_Dataframe_path)) \
             if os.path.exists(self.master_Discogs_Dataframe_path) \
             else DataHandler.create_new_discogs_dataframe()
-
-
-
-    """def display_dataframe(self):
-        if self.Search_Dataframe is not None:
-            print("Search Dataframe :")
-            print(self.Search_Dataframe)
-        if self.Release_Dataframe is not None:
-            print("Release Dataframe :")
-            print(self.Release_Dataframe)"""
 
     def loadfromCSV(self, csv_file):
         try:
@@ -98,7 +79,6 @@ class DataHandler:
     def save_dataframe(self, dataframe, path):
         dataframe.to_csv(path, index=False)
         print(f"DataFrame saved to {path}")
-
 
     """
     Spotify Dataframes
@@ -188,15 +168,6 @@ class DataHandler:
         self.Spotify_Dataframe.loc[self.Spotify_Dataframe[
                                        'Discogs_Artists'] == artist, 'Spotify_Popularity_Followers'] = f"{popularity}, {followers}, {current_time}"
 
-    def update_spotify_dataframe_with_preview_urls(self, row, preview_urls):
-        preview_urls_str = ', '.join(filter(None, preview_urls))  # Concatenate non-None URLs
-
-        if 'Preview_URLs' not in self.Spotify_Dataframe.columns:
-            self.Spotify_Dataframe['Preview_URLs'] = None
-
-        # Update the DataFrame with the concatenated preview URLs
-        self.Spotify_Dataframe.at[row.name, 'Preview_URLs'] = preview_urls_str
-
     def save_Spotify_Dataframe(self, path, update_master_Spotify_Dataframe=True):
         """Save the Spotify DataFrame to a CSV file."""
         # Ensure the file name ends with .csv
@@ -248,7 +219,6 @@ class DataHandler:
         else:
             return []
 
-
     """
     Discogs Dataframes
     """
@@ -276,16 +246,57 @@ class DataHandler:
     def display_Search_Dataframedata(self):
         print(self.Search_Dataframe)
 
-    def save_Search_Dataframe(self, path):
+    def save_Search_Dataframe(self, path, update_master=True):
         if path.endswith('.csv'):
             pass
         else:
             path = path+'.csv'
-        #path = input("Enter a Save name for Dataframe")
         self.Search_Dataframe.to_csv(path_or_buf=path, index=False)
-        self.set_loaded_search_csv_file(path) # Set the loaded CSV file
+        self.set_loaded_search_csv_file(path)  # Set the loaded CSV file
+        if update_master:
+            self.update_and_save_master_Discogs_Dataframe(self.Search_Dataframe)
 
     def update_search_dataframe(self, center_releases_content):
+        if center_releases_content is None or not isinstance(center_releases_content, list):
+            raise ValueError("center_releases_content must be a non-empty list of dictionaries")
+
+        # Check that each dictionary has the expected keys
+        expected_keys = ['Discogs_Artists', 'Discogs_Titles']
+        for item in center_releases_content:
+            if not all(key in item for key in expected_keys):
+                raise ValueError(f"Each dictionary must contain the keys {expected_keys}")
+
+        # Convert the list of dictionaries to a DataFrame
+        new_df = pd.DataFrame(center_releases_content)
+
+        # Use apply function to check and update the u_id
+        if 'Discogs_Tracks' in new_df.columns:
+            new_df['u_id'] = new_df.apply(
+                lambda row: self.check_and_update_u_id(row['Discogs_Artists'], row['Discogs_Titles'],
+                                                       row['Discogs_Tracks']), axis=1)
+        else:
+            new_df['u_id'] = new_df.apply(
+                lambda row: self.check_and_update_u_id(row['Discogs_Artists'], row['Discogs_Titles']), axis=1)
+
+        # Concatenate new_df with Search_Dataframe and drop duplicates
+        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df]).drop_duplicates()
+
+        # Log the completion of the method
+        logging.info("update_search_dataframe completed successfully")
+
+    def check_and_update_u_id(self, artist_name, album_name=None, track_name=None):
+        if album_name:
+            u_id = self.check_u_id_in_master_list(artist_name, album_name)
+        elif track_name:
+            u_id = self.check_u_id_in_master_list(artist_name, track_name)
+        else:
+            raise ValueError("Either album_name or track_name must be provided")
+
+        if not u_id:
+            u_id = self.generate_unique_id(artist_name, album_name or track_name)
+        return u_id
+
+    def update_search_dataframe_backup(self, center_releases_content):
         if center_releases_content is None or not isinstance(center_releases_content, list):
             raise ValueError("center_releases_content must be a non-empty list of dictionaries")
 
@@ -310,25 +321,6 @@ class DataHandler:
         # Concatenate new_df with Search_Dataframe and drop duplicates
         self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df]).drop_duplicates()
 
-    def update_search_dataframe_backup(self, center_releases_content):
-        if center_releases_content is not None:
-            if isinstance(center_releases_content, list):
-                # Convert the list of dictionaries to a DataFrame
-                new_df = pd.DataFrame(center_releases_content, columns=["u_id","Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
-
-            else:
-                raise ValueError("new_data must be a list of dictionaries")
-        else:
-            raise ValueError("self.center_releases_content is None")
-
-        # Concatenate new_df with self.df and drop duplicates
-        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
-            subset=["u_id","Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
-
     def save_Release_Dataframe(self, path):
         """Save the Release DataFrame to a CSV file."""
         # Ensure the file name ends with .csv
@@ -351,18 +343,7 @@ class DataHandler:
         else:
             print("No Release DataFrame to save.")
 
-    def get_release_dataframe_from_search_dataframe_backup(self):
-        """Create a Release DataFrame from the Search DataFrame."""
-        if self.Search_Dataframe is None:
-            print("DataHandler has no Search Dataframe to transform")
-            return
-
-        DiscogsReleaseScrape_obj = DiscogsReleaseScraper(self.Search_Dataframe)
-        DiscogsReleaseScrape_obj.get_release_dataframe_from_search_dataframe()
-        self.Release_Dataframe = DiscogsReleaseScrape_obj.Release_Dataframe
-
     def get_deep_search_dataframe(self):
-
         if self.Search_Dataframe is None:
             print("DataHandler has no Search Dataframe to transform")
             return
@@ -410,7 +391,7 @@ class DataHandler:
         self.Release_Dataframe = new_df
         return new_df
 
-    def get_expanded_tracklist_search_dataframe(self, tracklist_col='Discogs_Tracklist', youtube_col='Discogs_YouTube_Videos'):
+    def get_expanded_tracklist_search_dataframe(self, tracklist_col='Discogs_Tracklist', youtube_col='Discogs_YouTube_Videos', generate_u_id=True):
         df = self.Release_Dataframe if self.Release_Dataframe is not None else self.Search_Dataframe
         # Prepare a container for the new DataFrame rows
         new_rows = []
@@ -440,7 +421,7 @@ class DataHandler:
                         # Match the track name with the closest YouTube video title and URL
                         youtube_matches = self.match_youtube_videos(track_details[1], row[youtube_col])
                         if youtube_matches:
-                            print(f"this is youtube matches {youtube_matches}")
+                            #print(f"this is youtube matches {youtube_matches}")
                             # Extract just the title from the match for appending
                             #youtube_title = youtube_match.split(',')[0]
                             new_row['Discogs_Tracks_Youtube'] = youtube_matches
@@ -448,28 +429,25 @@ class DataHandler:
 
                         new_rows.append(new_row)
 
-
-            # Update the YouTube matches for all track rows that were created from this release
-           # for new_row in new_rows[-len(tracks):]:  # Get the last 'n' entries where 'n' is the number of tracks
-           #     # Join the matched titles with comma
-            #    new_row['Discogs_Tracks_Youtube'] = ', '.join(track_youtube_matches)
-
         # Create a new DataFrame from the new_rows list
         new_df = pd.DataFrame(new_rows)
         # Reorder the columns so the track details start from the second column
-        col_order = ['u_id', 'Discogs_Tracks_Artists', 'Discogs_Tracks', 'Discogs_Tracks_Durations',
+        col_order = ['u_id_track', 'Discogs_Tracks_Artists', 'Discogs_Tracks', 'Discogs_Tracks_Durations',
                      'Discogs_Tracks_Positions', 'Discogs_Tracks_Youtube'''] + \
                     [col for col in new_df.columns if
-                     col not in ['u_id', 'Discogs_Tracks_Artists', 'Discogs_Tracks', 'Discogs_Tracks_Durations',
+                     col not in ['u_id_track', 'Discogs_Tracks_Artists', 'Discogs_Tracks', 'Discogs_Tracks_Durations',
                                  'Discogs_Tracks_Positions', 'Discogs_Tracks_Youtube''']]
         new_df = new_df[col_order]
 
-        self.Release_Dataframe = new_df
+        self.Track_Release_Dataframe = new_df
 
         return new_df
 
+
     def match_youtube_videos(self, track_name, youtube_videos):
-        if not track_name or not youtube_videos:
+        if not isinstance(track_name, str) or not isinstance(youtube_videos, str):
+            if youtube_videos == ' ':
+                return None
             return None
         # Split the list of videos into individual video strings
         video_pairs = youtube_videos.split(' | ') if youtube_videos else []
@@ -487,8 +465,7 @@ class DataHandler:
         return [video_pairs[index] for index in match_indexes] if match_indexes else None
 
     def add_new_release_to_dataframe(self, index, release_content):
-        self.get_master_Discogs_Dataframe_u_ids_list()
-        u_id = DataframeFilter.generate_unique_id(exclusion_list= self.get_master_Discogs_Dataframe_u_ids_list())
+
         # Check if a Release DataFrame exists and if not, create one
         if self.Search_Dataframe is not None and self.Release_Dataframe is None:
             self.Release_Dataframe = self.Search_Dataframe
@@ -499,6 +476,7 @@ class DataHandler:
         for col in self.Release_Dataframe.columns:
             self.Release_Dataframe[col] = self.Release_Dataframe[col].astype('object')
 
+        #self.Release_Dataframe.at[index, 'u_id'] = u_id
         # Update the DataFrame with the new release content by index
         self.update_release_Dataframe_table_content(index, release_content['table_content'])
         self.update_release_Dataframe_tracklist_content(index, release_content['tracklist_content'])
@@ -567,11 +545,6 @@ class DataHandler:
         video_links_str = ' | '.join([f"{title},{url}" for title, url in release_video_links_content])
         self.Release_Dataframe.at[index, 'Discogs_YouTube_Videos'] = video_links_str
 
-        """# Convert video links list to a single string format
-        video_links_str = ', '.join(release_video_links_content)
-        self.Release_Dataframe.at[index, 'Discogs_YouTube_Videos'] = str(video_links_str)"""
-
-
     def is_duplicate(self, discogs_url):
         # Assuming 'Discogs_URLS' is a unique identifier for each release
         #url = table_content.get('Discogs_URLS')
@@ -635,6 +608,8 @@ class DataHandler:
                         subset=['u_id'])
                 else:
                     master_Discogs_Dataframe = dataframe
+
+
                 self.save_dataframe(master_Discogs_Dataframe, self.master_Discogs_Dataframe_path)
                 print(f"Master Discogs DataFrame saved to {self.master_Discogs_Dataframe_path}")
             self.order_master_Discogs_Dataframe_by_Discogs_Unique_ID()
@@ -656,107 +631,39 @@ class DataHandler:
         else:
             return []
 
+    """
+    Master U ID Methods
+    """
+
+
+    def create_new_u_id_dataframe(self, data=None, in_file=False):
+        """Create an empty u_id DataFrame."""
+        u_id_df = pd.DataFrame(data if data else None,
+                               columns=['u_id_track', 'u_id_release', 'u_id_artist', 'u_id_label', 'u_id_genre'])
+        if in_file:
+            self.save_dataframe(u_id_df, self.master_u_id_Dataframe_path)
+        return u_id_df
 
     """
-    Master u_id Dataframe
+    Backups
+    
     """
-    def create_new_u_id_dataframe(self, data=None):
-        """Create an empty Spotify DataFrame."""
-        u_id = pd.DataFrame(data if data else None,
-                                         columns=['u_id'])
-        return u_id
 
-    def check_url_in_master_list(self, url):
-        """
-        Checks if a URL exists in the master_u_id_list.
-        Returns the u_id and its type if found, otherwise (None, None).
-        """
-        # Stream the master_u_id_Dataframe in chunks
-        for chunk in pd.read_csv(self.master_u_id_Dataframe_path, chunksize=1000):  # Adjust chunksize as needed
-            matched_row = chunk[chunk['url_column_name'] == url]  # Replace 'url_column_name' with actual column name
-            if not matched_row.empty:
-                u_id = matched_row['u_id_column_name'].iloc[0]  # Replace 'u_id_column_name' with actual column name
-                u_id_type = 'type_to_determine'  # Determine the type of u_id
-                return u_id, u_id_type
-        return None, None
+    def update_search_dataframe_backup(self, center_releases_content):
+        if center_releases_content is not None:
+            if isinstance(center_releases_content, list):
+                # Convert the list of dictionaries to a DataFrame
+                new_df = pd.DataFrame(center_releases_content, columns=["u_id","Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
 
-    def generate_unique_id(self, exclusion_list=None):
-        """Generates a random unique identifier."""
-        length = 10  # Adjust the length as needed
-        characters = string.ascii_letters + string.digits
-        id = ''.join(random.choice(characters) for _ in range(length))
-        if exclusion_list is not None:
-            while id in exclusion_list:
-                id = ''.join(random.choice(characters) for _ in range(length))
-        return id
+            else:
+                raise ValueError("new_data must be a list of dictionaries")
+        else:
+            raise ValueError("self.center_releases_content is None")
 
-
-    """def find_missing_data(self):
-        missing_data = self.df.isna()
-        return missing_data
-
-    def fill_in_missing_data(self, max_rows_to_update=None):
-        missing_data = self.find_missing_data()
-        rows_processed = 0
-
-        for index, row in self.df.iterrows():
-            if max_rows_to_update is not None and rows_processed >= max_rows_to_update:
-                break
-            self.discogs_release_content_scraper.get_release_url_content()
-            # Check and fetch missing country data
-            if missing_data.at[index, 'Discogs_Countries'] and not pd.isna(row['Discogs_Urls']):
-                self.df.at[index, 'Discogs_Countries'] = self.fetch_country_data(row['Discogs_Urls'])
-
-            # Check and fetch missing label data
-            if missing_data.at[index, 'Discogs_Labels'] and not pd.isna(row['Discogs_Urls']):
-                self.df.at[index, 'Discogs_Labels'] = self.fetch_label_data(row['Discogs_Urls'])
-
-            # Check and fetch missing tags data
-            if missing_data.at[index, 'Discogs_Tags'] and not pd.isna(row['Discogs_Urls']):
-                self.df.at[index, 'Discogs_Tags'] = self.fetch_tags_data(row['Discogs_Urls'])
-
-            rows_processed += 1
-            # Additional conditions can be added here for other fields
-            # ...
-
-    def fetch_country_data(self, url):
-        fetch_request = {'Country' : "blah"}
-        self.Soup_From_Url = self.get_Soup_from_url(url)
-        # Implement the scraping logic for country data
-        return fetch_request
-
-    def fetch_label_data(self, url):
-        # Implement the scraping logic for label data
-        return "Label from URL"
-
-    def fetch_tags_data(self, url):
-        # Implement the scraping logic for tags data
-        return "Tags from URL"
-
-
-    def fill_in_missing_data(self, max_rows_to_update=None):
-        rows_processed = 0
-        print('here')
-        for index, row in self.df.iterrows():
-            print('to')
-            if max_rows_to_update is not None and rows_processed >= max_rows_to_update:
-                break
-
-            discogs_url = row['Discogs_Urls']
-            SoupObj = scraper.createSoupObjFromUrl(discogs_url)
-
-            # Update table content
-            release_table_content = scraper.get_release_table_content(SoupObj)
-            self.update_release_table_content(index, release_table_content)
-
-            # Update tracklist content
-            release_tracklist_content = scraper.get_release_tracklist_content(SoupObj)
-            self.update_release_tracklist_content(index, release_tracklist_content)
-
-            # Update video links content
-            release_video_links_content = scraper.get_release_video_links_content(SoupObj)
-            self.update_release_video_links_content(index, release_video_links_content)
-
-            rows_processed += 1
-            time.sleep(random.gauss(mu=3, sigma=0.5))"""
-
+        # Concatenate new_df with self.df and drop duplicates
+        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
+            subset=["u_id","Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Genres", "Discogs_Styles",
+                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
+                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])

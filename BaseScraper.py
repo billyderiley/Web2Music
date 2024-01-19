@@ -10,9 +10,7 @@ from fake_useragent import UserAgent
 import pandas as pd
 import sqlite3
 import pickle
-
 from DatabaseManager import DatabaseManager
-
 
 class BaseScraper(DatabaseManager):
     def __init__(self):

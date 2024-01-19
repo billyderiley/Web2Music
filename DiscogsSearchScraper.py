@@ -25,27 +25,6 @@ class DiscogsSearchScraper(BaseScraper):
         else:
             self.Search_Dataframe = Search_Dataframe
 
-        #self.next_page = self.get_next_search_page_url(start_url)
-        #if data_handler is None:
-        #    self.data_handler = DataHandler()
-        #else:
-        #    self.data_handler = data_handler
-
-
-
-    """def update_release_dataframe(self, release_table_content, release_tracklist_content, release_video_links_content):
-        #if isinstance(new_data, dict):
-            # Convert the dictionary to a DataFrame
-            new_df = pd.DataFrame([new_data])
-        elif isinstance(new_data, list):
-            # Convert the list of dictionaries to a DataFrame
-            new_df = pd.DataFrame(new_data)
-        else:
-            raise ValueError("new_data must be a dictionary or a list of dictionaries")
-        self.Release_Dataframe = self.Release_Dataframe.append(release_table_content, ignore_index=True)
-        self.Release_Dataframe = self.Release_Dataframe.append(release_tracklist_content, ignore_index=True)
-        self.Release_Dataframe = self.Release_Dataframe.append(release_video_links_content, ignore_index=True)
-        """
 
     def get_search_url_content_dict(self, ):
         aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by = self.get_current_search_page_content()
@@ -57,46 +36,16 @@ class DiscogsSearchScraper(BaseScraper):
         }
         return current_search_url_info_dict
 
-
-    """def update_search_dataframe(self):
-        if self.center_releases_content is not None:
-            if isinstance(self.center_releases_content, list):
-                # Convert the list of dictionaries to a DataFrame
-                new_df = pd.DataFrame(self.center_releases_content, columns=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])
-
-            else:
-                raise ValueError("new_data must be a list of dictionaries")
-        else:
-            raise ValueError("self.center_releases_content is None")
-
-        # Concatenate new_df with self.df and drop duplicates
-        self.Search_Dataframe = pd.concat([self.Search_Dataframe, new_df], ignore_index=True).drop_duplicates(
-            subset=["Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",
-                                                "Discogs_Countries", "Discogs_Years", "Discogs_Search_Filters", "Discogs_Urls",
-                                                "Discogs_Formats", "Discogs_Tracklist",  "Discogs_YouTube_Videos"])"""
-
-    def deep_search_release_info(self):
-        pass
-
-
     def get_current_search_page_content(self):
         base_url = self.current_url
-        #Base_Scraper = BaseScraper()
         SoupObj = self.get_Soup_from_url(base_url)
         aside_navbar_content, applied_filters, new_applied_filters_list = self.get_aside_navbar_content(SoupObj)
         sort_by = self.get_sort_by(SoupObj)
         self.sort_by = sort_by
-        #self.updateAppliedFilters(self.getAppliedFiltersFromUrl(self.current_url))
         center_releases_content = self.get_center_releases_content(SoupObj)
-        # aside_navbar_content
-        # center_releases_content
-        # applied_filters
         return aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by
 
     def get_aside_navbar_content(self, SoupObj):
-        #print("testing_aside_navbar_content")
         aside_navbar_content = {}
         applied_filters = []
         new_applied_filters_list = []
@@ -110,7 +59,6 @@ class DiscogsSearchScraper(BaseScraper):
         else:
             first_filt_words = []
         left_side_facets = left_side_menu_html.find_all('h2', class_="facets_header")
-        #applied_filters_bool = len(left_side_facets) == 6
         for i, h2_ in enumerate(left_side_facets):
             if len(left_side_facets) == 1:
                 print("No additional search options, remove some to proceed.")
@@ -118,8 +66,6 @@ class DiscogsSearchScraper(BaseScraper):
             else:
                 if 'Applied Filters' in h2_.text:
                     continue
-                #print('did this instead')
-                #print(h2_.findNext('div', class_='more_facets_dialog'))
                 if h2_.findNext('div', class_='more_facets_dialog') is None:
                     __intermediate_level__ = h2_.findNext('ul', class_='no_vertical facets_nav')
                     facets_nav_uls = [__intermediate_level__]
@@ -135,20 +81,8 @@ class DiscogsSearchScraper(BaseScraper):
                 try:
                     for li in ul.find_all('li'):
                         facet_name = li.find('span', class_='facet_name').text
-
-                        #print(facet_name)
-                        #facet_name_spaces_replace = facet_name.replace(' ', '+')
-                        #print(facet_name_spaces_replace)
-                        #print(applied_filters)
-                        # check if the facet_name_spaces_replace is in any of the string values in applied_filters
-                       # if any(facet_name_spaces_replace in x for x in applied_filters):
-                       #     print("yes")
-
-                        #if facet_name_spaces_replace in [x for x in applied_filters].any() is True
-
                         href = li.find('a')['href']
                         search_term = href.split('?')[-1]
-                        #print(search_term)
                         __search_term = search_term.split('=')
                         ____search_term = [term.split('&') for term in __search_term]
                         # code to flatten list ____search_term into a single 1 dimensional list
@@ -156,13 +90,9 @@ class DiscogsSearchScraper(BaseScraper):
                         # Reverse the list and assign to a new variable
                         # if new_applied_filters_list equal or larger than 4
                         if len(new_applied_filters_list) >= 2:
-                            #print(new_applied_filters_list)
                             #slice last two indexes from new_applied_filters_list out of the list
                             new_applied_filters_list = new_applied_filters_list[:-2]
                             new_applied_filters_list = new_applied_filters_list[::-1]
-
-
-
                         aside_navbar_content[header_name][facet_name] = href
                 except AttributeError:
                     pass
@@ -171,9 +101,7 @@ class DiscogsSearchScraper(BaseScraper):
     def get_center_releases_content(self, SoupObj):
         a_tags = SoupObj.find_all('a', class_='thumbnail_link')
         center_releases_content = []
-        """   if type(releases) is not list:
-            raise TypeError
-        """
+
         # Extract the 'aria-label' and 'href' attributes from each <a> tag
         for tag in a_tags:
             aria_label = tag.get('aria-label')
@@ -201,18 +129,14 @@ class DiscogsSearchScraper(BaseScraper):
 
     def get_sort_by(self, SoupObj):
         sort_by_dict = {'Selected': {}, 'Options': {}}
-
         sort_by = SoupObj.find('select', id='sort_top')
         if sort_by is not None:
             options = sort_by.find_all('option')
             for option in options:
                 if option.get('selected'):
-                    #print("no here")
                     sort_by_dict['Selected'][option.text] = option['value']
                 else:
-                    #print('here')
                     sort_by_dict['Options'][option.text] = option['value']
-        #print(sort_by_dict)
 
         return sort_by_dict
 
@@ -282,19 +206,6 @@ class DiscogsSearchScraper(BaseScraper):
 
         return new_page_url
 
-    """def create_url_from_page_number(self, url, page_number):
-        if "page=" in url:
-            stripped_page_url, current_page_number = url.split('page=')[0], url.split('page=')[-1]
-            new_page_url = stripped_page_url+page_number
-        else:
-            if url.endswith('/'):
-                new_page_url = url+"?page="+page_number
-            elif url.endswith('?'):
-                new_page_url = url + "page=" + page_number
-            else:
-                new_page_url = url + "&page=" + page_number
-        return new_page_url"""
-
     def search_dict_get(self):
         return self.search_options_dict
 
@@ -321,7 +232,6 @@ class DiscogsSearchScraper(BaseScraper):
             applied_filters = [applied_filters]
         clean_applied_filters = []
         for filt in applied_filters:
-                #applied_filters.remove(filt)
             while filt.startswith(' ') or filt.startswith('\n'):
                 filt = filt.lstrip(' ')
                 filt = filt.lstrip('\n')
@@ -331,23 +241,12 @@ class DiscogsSearchScraper(BaseScraper):
             # code to transform any spaces into +
             filt = filt.replace(' ', '+')
             clean_applied_filters.append(filt)
-            #i need the code to get the search term from the applied filter
 
         return clean_applied_filters
 
     def addAppliedFilter(self, applied_filter):
         self.applied_filters.append(applied_filter)
-    """
-    def remove_applied_filter(self, applied_filters, remove_value):
-        #print("here")
-        for i in range(1, len(applied_filters)):
-            #print(applied_filters[i], i)
-            if applied_filters[i] == remove_value:
-                # Remove the element and the one before it
-                del applied_filters[i - 1:i + 1]
-                break  # Break after removing the elements to avoid index errors
-        return applied_filters
-    """
+
     def updateAppliedFilters(self, applied_filters):
         #print(f'update appledfilters {applied_filters}')
         if type(applied_filters) is list:
@@ -383,16 +282,10 @@ class DiscogsSearchScraper(BaseScraper):
             raise ValueError
         else:
             if 'page' in url:
-                #print('need to remove pages from url')
-                #print(url)
                 # code to use regex to remove page= and any number after it
                 url = re.sub(r'page=\d+', '', url)
-                #print(url)
             if 'sort' in url:
-                #print(url)
                 url = re.sub(r'sort=[^&]+', '', url)
-               # print(url)
-
 
             if url.endswith('/'):
                 applied_filters = []
@@ -454,7 +347,6 @@ class DiscogsSearchScraper(BaseScraper):
             #
             pages_term = ['pages', str(start_number), str(end_number)]
             return [self.create_url_from_page_number(new_discogs_search_url, str(page_num)) for page_num in range(start_number, end_number)]
-
 
 def create_search_dataframe():
     search_df = pd.DataFrame(columns=["u_id" ,"Discogs_Artists", "Discogs_Titles", "Discogs_Labels", "Discogs_Tags",

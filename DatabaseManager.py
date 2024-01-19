@@ -151,51 +151,6 @@ class DatabaseManager:
         conn.close()
 
 
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    def execute_in_batches_backup(self, urls, action, batch_size=5):
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            # Submit each URL to the executor
-            future_to_url = {executor.submit(action, url): url for url in urls}
-
-            # Process the results as they complete
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    future.result()  # This is where the action function is executed
-                    # print(f"Loaded webpage: {future.result()}")  # Print the URL returned by the action function
-                except Exception as exc:
-                    print(f"{url} generated an exception: {exc}")
-
-    """def execute_in_batches_spotify_api_call(self, action, batch_size=5, *args, **kwargs):
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            futures = [executor.submit(action, *args, **kwargs) for args, kwargs in self.search_queue]
-            for future in as_completed(futures):
-                # Handle the search results based on the format
-                # Process the results here, such as saving them to the database or other operations
-                pass
-        # Clear the queue after processing
-        self.search_queue = []"""
-
-    def execute_in_batches_dataframe(self, dataframe, process_function, batch_size=5):
-
-        results = defaultdict(list)
-
-        # Divide dataframe into batches
-        dataframe_batches = self.divide_into_batches(dataframe, batch_size)
-
-        # Process each batch in parallel
-        for batch in dataframe_batches:
-            with ThreadPoolExecutor(max_workers=batch_size) as executor:
-                future_to_row = {executor.submit(process_function, row): row for _, row in batch.iterrows()}
-                for future in as_completed(future_to_row):
-                    batch_results = future.result()
-                    for key, value in batch_results.items():
-                        results[key].extend(value)
-
-        return results
-
     def divide_into_batches(self, dataframe, batch_size):
         # Divide dataframe into batches of rows
         for i in range(0, len(dataframe), batch_size):
@@ -232,8 +187,6 @@ class DatabaseManager:
                 return method_name
         else:
             return "Unknown location"
-
-
 
     """
     Methods for handling input_history

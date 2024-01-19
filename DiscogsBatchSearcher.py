@@ -2,7 +2,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import urllib.parse
 from DataframeFilter import DataframeFilter
-
 from DiscogsSearchScraper import DiscogsSearchScraper
 from DiscogsReleaseScraper import DiscogsReleaseScraper
 from ScrapeDataHandler import DataHandler
@@ -10,8 +9,6 @@ from ScrapeDataHandler import DataHandler
 class BatchSearcher:
     def __init__(self):
         pass
-
-
 
 class DiscogsBatchSearcher:
     def __init__(self):
@@ -25,7 +22,24 @@ class DiscogsBatchSearcher:
     """
     Methods for searching the Discogs search page using filters (mechanism via altering the terms in the url)
     """
+    def fetch_search_page_content(self, url):
+        """
+        Fetches the HTML content of a given search page (url).
+        """
+        self.Discogs_Search_Scraper.current_url = url
 
+        # Logic to fetch the page content
+        soup = self.Discogs_Search_Scraper.get_Soup_from_url(url)
+        aside_navbar_content, applied_filters, new_applied_filters_list = self.Discogs_Search_Scraper.get_aside_navbar_content(soup)
+        self.Discogs_Search_Scraper.updateAppliedFilters(applied_filters=self.Discogs_Search_Scraper.getAppliedFiltersFromUrl(self.Discogs_Search_Scraper.current_url))
+        self.Discogs_Search_Scraper.sort_by = self.Discogs_Search_Scraper.get_sort_by(soup)
+        selected_sort_by = self.Discogs_Search_Scraper.sort_by['Selected']
+        center_releases_content = self.Discogs_Search_Scraper.get_center_releases_content(soup)
+        return center_releases_content, aside_navbar_content, selected_sort_by
+
+    """
+    Using a discogs search page or release page, and batching the process via multithreading
+    """
     def fetch_and_aggregate_release_content(self, urls, batch_size=5):
         """
         Fetches and aggregates release content from multiple URLs using multithreading.
@@ -53,40 +67,6 @@ class DiscogsBatchSearcher:
                 future.result()  # Ensures any exceptions are raised
 
         return aggregated_releases_list
-
-    def fetch_and_aggregate_release_content_Backup(self, urls):
-        """
-        Fetches and aggregates release content from multiple URLs.
-
-        :param urls: A list of Discogs release search URLs.
-        :return: A list of release_info dictionaries.
-        """
-        aggregated_releases_list = []
-
-        for url in urls:
-            center_releases_content, _, _ = self.fetch_search_page_content(url)
-
-            for release_info in center_releases_content:
-                # Check if the title already exists in the aggregated list
-                if not any(release['Discogs_Titles'] == release_info['Discogs_Titles'] for release in
-                           aggregated_releases_list):
-                    aggregated_releases_list.append(release_info)
-
-        return aggregated_releases_list
-
-    def execute_search_urls_in_batches(self, urls, action, batch_size=5):
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            # Submit each URL to the executor
-            future_to_url = {executor.submit(action, url): url for url in urls}
-
-            # Process the results as they complete
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    future.result()  # This is where the action function is executed
-                    # print(f"Loaded webpage: {future.result()}")  # Print the URL returned by the action function
-                except Exception as exc:
-                    print(f"{url} generated an exception: {exc}")
 
     """
     Methods for searching for artist and title on Discogs search page
@@ -157,22 +137,6 @@ class DiscogsBatchSearcher:
         else:
             return None
 
-    def fetch_search_page_content(self, url):
-        """
-        Fetches the HTML content of a given search page (url).
-        """
-        self.Discogs_Search_Scraper.current_url = url
-
-        # Logic to fetch the page content
-        soup = self.Discogs_Search_Scraper.get_Soup_from_url(url)
-        aside_navbar_content, applied_filters, new_applied_filters_list = self.Discogs_Search_Scraper.get_aside_navbar_content(soup)
-        self.Discogs_Search_Scraper.updateAppliedFilters(applied_filters=self.Discogs_Search_Scraper.getAppliedFiltersFromUrl(self.Discogs_Search_Scraper.current_url))
-        self.Discogs_Search_Scraper.sort_by = self.Discogs_Search_Scraper.get_sort_by(soup)
-        selected_sort_by = self.Discogs_Search_Scraper.sort_by['Selected']
-        center_releases_content = self.Discogs_Search_Scraper.get_center_releases_content(soup)
-
-
-        return center_releases_content, aside_navbar_content, selected_sort_by
 
     def parse_search_results(self, content, searched_for: tuple):
         """
@@ -204,7 +168,6 @@ class DiscogsBatchSearch(DiscogsBatchSearcher):
     End to end process for creating a new dataframe from using search 
     filters and page numbers
     """
-
     def process_search_page_filters_and_update(self, search_urls):
         """
         Fetches and aggregates release content based on search page filters and updates the Search DataFrame.
@@ -215,6 +178,8 @@ class DiscogsBatchSearch(DiscogsBatchSearcher):
         print(f" the following urls will be processed: {search_urls}")
         # Fetch and aggregate release content
         aggregated_releases = self.fetch_and_aggregate_release_content(search_urls)
+
+        #aggregated_releases = self.data_handler_generate_u_ids_per_album(aggregated_releases)
 
         # Initialize an empty DataFrame
         search_df = DataHandler.create_new_discogs_dataframe(aggregated_releases)
@@ -272,7 +237,7 @@ class ReleaseBatchSearcher(DiscogsBatchSearcher):
         DiscogsBatchSearcher.__init__(self)
         self.data_handler = data_handler
 
-    def process_release_search_queue_from_dataframe(self, filtered_df, batch_size=10):
+    def process_release_search_queue_from_dataframe(self, filtered_df, batch_size=5):
         # Prepare index and URL pairs for batch search
         index_url_pairs = [(index, row['Discogs_Urls']) for index, row in filtered_df.iterrows() if
                            'Discogs_Urls' in row]
@@ -284,25 +249,6 @@ class ReleaseBatchSearcher(DiscogsBatchSearcher):
             if release_data:
                 self.data_handler.add_new_release_to_dataframe(index, release_data)
 
-
-    def process_release_search_queue_from_dataframe_Backup2(self, rows_to_search):
-        # Prepare index and URL pairs for batch search
-        index_url_pairs = []
-        for index, row in rows_to_search:
-            if 'Discogs_Urls' in row:
-                index_url_pairs.append((index, row['Discogs_Urls']))
-            else:
-                print(f"No 'Discogs_Urls' key in the row at index {index}.")
-
-        # Perform batch search and get results
-        index_release_data_mapping = self.process_release_urls_and_update(index_url_pairs)
-
-        # Update the DataFrame with the fetched release data
-        for index, _ in rows_to_search:
-            release_info_dict = index_release_data_mapping.get(index)
-            if release_info_dict:
-                release_data = release_info_dict['table_release_content']
-                self.data_handler.add_new_release_to_dataframe(index, release_data)
 
     def process_release_urls_and_update(self, index_url_pairs, batch_size=5):
         # Create a ReleaseBatchSearcher instance and perform batch search
@@ -333,27 +279,45 @@ class ReleaseBatchSearcher(DiscogsBatchSearcher):
         return index_release_data_mapping
 
 
-    def process_release_search_queue_from_dataframe_backup(self, rows_to_search):
-        release_urlz = []
-        for index, row in rows_to_search:
-            if 'Discogs_Urls' in row:
-                release_urlz.append(row['Discogs_Urls'])
-            else:
-                print("No 'Discogs_Urls' key in the row.")
-        release_urls = [row[1]['Discogs_Urls'] for row in rows_to_search]
+    def fetch_release_data(self, release_url):
+        """
+        Fetches release data for a specific Discogs release URL.
 
-        aggregated_results = self.process_release_urls_and_update(release_urls)
+        :param release_url: The Discogs release URL.
+        :return: Release data.
+        """
+        # Fetch release data from the release URL
+        release_info_dict = self.Discogs_Release_Scraper.get_current_release_url_content(release_url)
+        return release_info_dict
 
-        # Prepare a dictionary with the index and corresponding release data
-        index_release_data_mapping = {index: release_data for index, release_data in enumerate(aggregated_results)}
 
-        for index, row in rows_to_search:
-            # Add each release data to the DataFrame using the corresponding index
-            release_data = index_release_data_mapping.get(index)
-            if release_data:
-                self.data_handler.add_new_release_to_dataframe(index, release_data)
 
-    
+
+    """
+    Backups
+    """
+
+    def fetch_and_aggregate_release_content_Backup(self, urls):
+        """
+        Fetches and aggregates release content from multiple URLs.
+
+        :param urls: A list of Discogs release search URLs.
+        :return: A list of release_info dictionaries.
+        """
+        aggregated_releases_list = []
+
+        for url in urls:
+            center_releases_content, _, _ = self.fetch_search_page_content(url)
+
+            for release_info in center_releases_content:
+                # Check if the title already exists in the aggregated list
+                if not any(release['Discogs_Titles'] == release_info['Discogs_Titles'] for release in
+                           aggregated_releases_list):
+                    aggregated_releases_list.append(release_info)
+
+        return aggregated_releases_list
+
+
     def process_release_urls_and_update_backup(self, release_urls):
         # Create a ReleaseBatchSearcher instance and perform batch search
         aggregated_results = self.batch_search_releases(release_urls)
@@ -377,13 +341,56 @@ class ReleaseBatchSearcher(DiscogsBatchSearcher):
 
         return results
 
-    def fetch_release_data(self, release_url):
-        """
-        Fetches release data for a specific Discogs release URL.
+    def process_release_search_queue_from_dataframe_backup(self, rows_to_search):
+        release_urlz = []
+        for index, row in rows_to_search:
+            if 'Discogs_Urls' in row:
+                release_urlz.append(row['Discogs_Urls'])
+            else:
+                print("No 'Discogs_Urls' key in the row.")
+        release_urls = [row[1]['Discogs_Urls'] for row in rows_to_search]
 
-        :param release_url: The Discogs release URL.
-        :return: Release data.
-        """
-        # Fetch release data from the release URL
-        release_info_dict = self.Discogs_Release_Scraper.get_current_release_url_content(release_url)
-        return release_info_dict
+        aggregated_results = self.process_release_urls_and_update(release_urls)
+
+        # Prepare a dictionary with the index and corresponding release data
+        index_release_data_mapping = {index: release_data for index, release_data in enumerate(aggregated_results)}
+
+        for index, row in rows_to_search:
+            # Add each release data to the DataFrame using the corresponding index
+            release_data = index_release_data_mapping.get(index)
+            if release_data:
+                self.data_handler.add_new_release_to_dataframe(index, release_data)
+
+
+    def process_release_search_queue_from_dataframe_Backup2(self, rows_to_search):
+        # Prepare index and URL pairs for batch search
+        index_url_pairs = []
+        for index, row in rows_to_search:
+            if 'Discogs_Urls' in row:
+                index_url_pairs.append((index, row['Discogs_Urls']))
+            else:
+                print(f"No 'Discogs_Urls' key in the row at index {index}.")
+
+        # Perform batch search and get results
+        index_release_data_mapping = self.process_release_urls_and_update(index_url_pairs)
+
+        # Update the DataFrame with the fetched release data
+        for index, _ in rows_to_search:
+            release_info_dict = index_release_data_mapping.get(index)
+            if release_info_dict:
+                release_data = release_info_dict['table_release_content']
+                self.data_handler.add_new_release_to_dataframe(index, release_data)
+
+    def execute_search_urls_in_batches(self, urls, action, batch_size=5):
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            # Submit each URL to the executor
+            future_to_url = {executor.submit(action, url): url for url in urls}
+
+            # Process the results as they complete
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    future.result()  # This is where the action function is executed
+                    # print(f"Loaded webpage: {future.result()}")  # Print the URL returned by the action function
+                except Exception as exc:
+                    print(f"{url} generated an exception: {exc}")

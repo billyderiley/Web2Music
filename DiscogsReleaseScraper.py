@@ -265,7 +265,6 @@ class DiscogsReleaseScraper(BaseScraper):
             track_name = track_name.lstrip('–').rstrip('–').strip().lstrip(" ").rstrip(" ").strip().strip("–")
             track_position = track_position.lstrip('-').rstrip('-').strip().lstrip(" ").rstrip(" ").strip()
             track_position = track_position.lstrip('–').rstrip('–').strip().lstrip(" ").rstrip(" ").strip().strip("–")
-            print(artist)
         return duration, artist, track_name, track_position
 
     def get_release_tracklist_content_backup(self, SoupObj):

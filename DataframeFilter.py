@@ -5,8 +5,6 @@ from collections import Counter
 from UserInteraction import UserInteraction
 import Levenshtein as lv
 
-
-
 class DataframeFilter(UserInteraction):
     def __init__(self, dataframe, master_u_ids_list=None):
         super().__init__()
@@ -154,46 +152,6 @@ class DataframeFilter(UserInteraction):
         print("Selected values: ", selected_values)
         return selected_values
 
-    """def apply_filter(self, selected_column, selected_value):
-        if selected_value is not None:
-            filtered_in = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=True)
-            filtered_out = self.handle_user_selection(self.dataframe, selected_column, selected_value, filter_in=False)
-            print("\nSelect the DataFrame to keep:")
-            print("1: Original DataFrame, size: ", self.dataframe.shape)
-            print("2: Filtered In DataFrame, size: ", filtered_in.shape)
-            print("3: Filtered Out DataFrame, size: ", filtered_out.shape)
-            choice = int(self.get_user_input("Enter your choice (1, 2, or 3): "))
-            if choice == 1:
-                self.filtered_dataframe = self.dataframe
-            elif choice == 2:
-                self.filtered_dataframe = filtered_in
-            elif choice == 3:
-                self.filtered_dataframe = filtered_out
-            else:
-                print("Invalid choice. Keeping the original DataFrame.")
-            print("New DataFrame Size: ", self.filtered_dataframe.shape)"""
-
-    """def apply_filter(self, selected_column, selected_values, exclusive=False):
-        if selected_values:
-            if exclusive:
-                # Exclusive: Rows must contain only any of the selected values (and no others)
-                mask = self.dataframe[selected_column].apply(
-                    lambda x: set(str(x).split(',')).issubset(set(selected_values))
-                )
-            else:
-                # Inclusive: Rows must contain at least one of the selected values (but can contain others)
-                mask = self.dataframe[selected_column].apply(
-                    lambda x: any(val in str(x).split(',') for val in selected_values)
-                )
-
-            filtered_df = self.dataframe[mask]
-        else:
-            print("No valid values selected. Keeping the original DataFrame.")
-            filtered_df = self.dataframe
-
-        self.filtered_dataframe = filtered_df
-        print("New DataFrame Size: ", self.filtered_dataframe.shape)"""
-
     def apply_filter(self, df, selected_column, selected_values, exclusive=False):
         selected_values_set = set(selected_values)  # Convert to set for efficient lookup
 
@@ -209,7 +167,6 @@ class DataframeFilter(UserInteraction):
             )
 
         return df[mask]
-
 
 
     def filter_rows_by_unique_values(self, column_name, min_count, max_count):
@@ -294,31 +251,6 @@ class DataframeFilter(UserInteraction):
 
         return filtered_df
 
-        """# Extract unique values
-        unique_values = pd.Series(
-            self.dataframe[selected_column].dropna().astype(str).str.cat(sep=',').split(',')).unique()
-
-        # Display unique values
-        for i, value in enumerate(unique_values, 1):
-            print(f"{i}: {value.strip()}")
-
-        # Get user input for value choice
-        value_choice = int(input("Enter the number of the value to filter by: ")) - 1
-        if value_choice < 0 or value_choice >= len(unique_values):
-            print("Invalid selection. Please try again.")
-            return
-
-        selected_value = unique_values[value_choice].strip()
-
-        # Ask whether to include or exclude the rows
-        filter_option = input("Type 'include' to keep rows with this value or 'exclude' to remove them: ").lower()
-
-        # Filter the DataFrame
-        self.filtered_dataframe = self.filter(selected_column, selected_value, include=(filter_option == 'include'))
-        print("Filter applied. The filtered DataFrame is stored in 'self.filtered_dataframe'.")
-        DataHandler.save_dataframe(dataframe=self.filtered_dataframe, save_as_file_name="filtered_dataframe.csv")"""
-
-
     def user_select_value(self, unique_values):
         """
     Prompts the user to select a value from the list of unique values.
@@ -376,11 +308,11 @@ class DataframeFilter(UserInteraction):
         """Generates a random unique identifier."""
         length = 10  # Adjust the length as needed
         characters = string.ascii_letters + string.digits
-        id = ''.join(random.choice(characters) for _ in range(length))
+        u_id = ''.join(random.choice(characters) for _ in range(length))
         if exclusion_list is not None:
-            while id in exclusion_list:
-                id = ''.join(random.choice(characters) for _ in range(length))
-        return id
+            while u_id in exclusion_list:
+                u_id = ''.join(random.choice(characters) for _ in range(length))
+        return u_id
 
     def get_search_items_backup(self, column_names, keep_unique_ids=True):
         """
