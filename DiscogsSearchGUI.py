@@ -112,24 +112,230 @@ class DiscogsSearchGUI(DiscogsSearchScraper):
             self.updateDataFrame()
 
     def user_interaction_add_filters(self):
+        """Interactive filter management - add/remove filters until user exits"""
         if self.current_url == self.start_url:
-            #print(self.current_url)
             self.start_up_search()
 
-        print(
-            f"Applied filters: {[applied_filter for i, applied_filter in reversed(list(enumerate(self.applied_filters, 1)))]} ")
-        print([f"{i}: {label_type}" for i, label_type in enumerate(self.search_dict_get_label_type_keys(), 1)])
-        if len(self.search_dict_get_label_type_keys()) == 0:
-            return
-        enter_key1 = int(input("")) - 1  # -1 to get index number
-        label_type, values = list(self.search_dict_get_label_type_items())[enter_key1]
-        print([f"{i}: {label_data}" for i, label_data in
-               reversed(list(enumerate(self.search_dict_get_label_url_keys(label_type), 1)))])
-        enter_key2 = int(input("")) - 1
-        new_search_term_1 = self.search_dict_get_search_term(label_type, enter_key2)
-        new_discogs_search_url = self.base_discogs_url + new_search_term_1
+        # Enter continuous filter management loop
+        while True:
+            print("\n" + "="*70)
+            print("  FILTER MANAGEMENT")
+            print("="*70)
+            
+            # Show currently applied filters
+            if self.applied_filters and len(self.applied_filters) > 0:
+                print("\n📌 Currently Applied Filters:")
+                # Parse applied filters (they come in pairs: value, type)
+                filter_display = []
+                for i in range(0, len(self.applied_filters), 2):
+                    if i + 1 < len(self.applied_filters):
+                        value = self.applied_filters[i]
+                        filter_type = self.applied_filters[i + 1]
+                        filter_display.append(f"  {len(filter_display) + 1}. {value} ({filter_type})")
+                if filter_display:
+                    print("\n".join(filter_display))
+            else:
+                print("\n📌 No filters currently applied")
+            
+            # Show available filter categories
+            print("\n📁 Available Filter Categories:")
+            available_categories = self.search_dict_get_label_type_keys()
+            if len(available_categories) == 0:
+                print("  No more filters available for this search")
+                print("\nPress Enter to return to main menu...")
+                input()
+                return
+            
+            category_list = [f"  {i}: Add {label_type} filter" for i, label_type in enumerate(available_categories, 1)]
+            print("\n".join(category_list))
+            
+            # Show remove filter option if filters exist
+            if self.applied_filters and len(self.applied_filters) > 0:
+                print(f"  R: Remove a filter")
+            
+            print(f"  Q: Finish and return to main menu")
+            
+            # Get user choice
+            print("\n" + "-"*70)
+            choice = input("Enter your choice: ").strip().upper()
+            
+            if choice == 'Q':
+                print("\nReturning to main menu...")
+                return
+            
+            # Handle remove filter
+            if choice == 'R' and self.applied_filters and len(self.applied_filters) > 0:
+                self._remove_filter_interactive()
+                continue
+            
+            # Handle add filter
+            if choice.isdigit():
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(available_categories):
+                    self._add_filter_interactive(choice_num - 1)
+                else:
+                    print(f"Invalid choice. Please enter 1-{len(available_categories)}")
+                    input("Press Enter to continue...")
+            else:
+                print("Invalid choice.")
+                input("Press Enter to continue...")
 
-        self.navigate_to_search_url(new_discogs_search_url, update_dataframes=False)
+    def _add_filter_interactive(self, category_index):
+        """Add filters interactively - stays in category until user exits"""
+        label_type, _ = list(self.search_dict_get_label_type_items())[category_index]
+        
+        # Enter continuous filter selection loop for this category
+        while True:
+            # Load all options for this category using Selenium
+            print(f"\nLoading all {label_type} options... (this may take a few seconds)")
+            all_options = self.get_all_filter_options_with_selenium(label_type)
+            
+            if all_options:
+                # Update the search_url_content_dict with all options
+                self.search_url_content_dict['aside_navbar_content'][label_type] = all_options
+                
+            # Show the options in a readable paginated format
+            option_keys = self.search_dict_get_label_url_keys(label_type)
+            selected_option = self._display_filter_options(label_type, option_keys)
+            
+            # If user quit browsing, return to filter management menu
+            if selected_option is None:
+                print("\nReturning to filter management menu...")
+                return
+            
+            enter_key2 = selected_option - 1  # Convert to 0-indexed
+            new_search_term_1 = self.search_dict_get_search_term(label_type, enter_key2)
+            new_discogs_search_url = self.base_discogs_search_url + new_search_term_1
+
+            # Navigate to the new URL with the filter applied
+            print(f"\n✓ Applying filter...")
+            self.navigate_to_search_url(new_discogs_search_url, update_dataframes=False)
+            print(f"✓ Filter applied! Search context updated with new available filters.")
+            print(f"   You can now add another {label_type} filter or press 'q' to return to filter menu.\n")
+
+    def _remove_filter_interactive(self):
+        """Remove a filter interactively"""
+        print("\n" + "="*70)
+        print("  REMOVE FILTER")
+        print("="*70)
+        
+        # Display filters with numbers
+        filter_list = []
+        for i in range(0, len(self.applied_filters), 2):
+            if i + 1 < len(self.applied_filters):
+                value = self.applied_filters[i]
+                filter_type = self.applied_filters[i + 1]
+                filter_list.append((value, filter_type))
+                print(f"  {len(filter_list)}. {value} ({filter_type})")
+        
+        print(f"  Q: Cancel")
+        
+        choice = input("\nEnter filter number to remove: ").strip().upper()
+        
+        if choice == 'Q':
+            return
+        
+        if choice.isdigit():
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(filter_list):
+                # Remove the filter pair (value and type)
+                index_to_remove = (choice_num - 1) * 2
+                removed_value = self.applied_filters[index_to_remove]
+                removed_type = self.applied_filters[index_to_remove + 1]
+                
+                # Remove both elements
+                del self.applied_filters[index_to_remove:index_to_remove + 2]
+                
+                # Rebuild URL from remaining filters
+                if len(self.applied_filters) == 0:
+                    new_url = self.base_discogs_search_url
+                else:
+                    new_url = self.getUrlFromAppliedFilters(self.applied_filters)
+                
+                print(f"\n✓ Removing filter: {removed_value} ({removed_type})")
+                self.navigate_to_search_url(new_url, update_dataframes=False)
+                print(f"✓ Filter removed! Updated search context loaded.")
+                input("\nPress Enter to continue...")
+            else:
+                print(f"Invalid choice. Please enter 1-{len(filter_list)}")
+                input("Press Enter to continue...")
+        else:
+            print("Invalid input.")
+            input("Press Enter to continue...")
+
+    def _display_filter_options(self, category, options):
+        """Display filter options in a clean, paginated, multi-column format"""
+        import math
+        
+        # Convert dict_keys to list if necessary
+        if not isinstance(options, list):
+            options = list(options)
+        
+        total_options = len(options)
+        print(f"\n{'='*70}")
+        print(f"  {category.upper()} - {total_options} options available")
+        print(f"{'='*70}")
+        
+        # Pagination settings
+        items_per_page = 50
+        total_pages = math.ceil(total_options / items_per_page)
+        current_page = 0
+        
+        while True:
+            start_idx = current_page * items_per_page
+            end_idx = min(start_idx + items_per_page, total_options)
+            # Show in normal order (most popular first) - no reversal
+            page_options = options[start_idx:end_idx]
+            
+            print(f"\nPage {current_page + 1}/{total_pages} (showing {start_idx + 1}-{end_idx} of {total_options})")
+            print("-" * 70)
+            
+            # Display in 2 columns for better readability
+            col_width = 35
+            for i in range(0, len(page_options), 2):
+                # Left column
+                idx1 = start_idx + i + 1
+                opt1 = page_options[i]
+                left = f"{idx1}: {opt1[:col_width-5]}"
+                
+                # Right column (if exists)
+                if i + 1 < len(page_options):
+                    idx2 = start_idx + i + 2
+                    opt2 = page_options[i + 1]
+                    right = f"{idx2}: {opt2[:col_width-5]}"
+                    print(f"{left:<35} {right}")
+                else:
+                    print(left)
+            
+            # Navigation prompt
+            print("\n" + "-" * 70)
+            nav_options = []
+            if current_page > 0:
+                nav_options.append("'p' for previous")
+            if current_page < total_pages - 1:
+                nav_options.append("'n' for next")
+            nav_options.append("'q' to finish browsing")
+            
+            print(f"Navigation: {' | '.join(nav_options)}")
+            
+            nav = input("Enter navigation or option number: ").strip().lower()
+            
+            if nav == 'n' and current_page < total_pages - 1:
+                current_page += 1
+            elif nav == 'p' and current_page > 0:
+                current_page -= 1
+            elif nav == 'q':
+                # User wants to quit - return None
+                return None
+            elif nav.isdigit():
+                # User entered a number - return it as int
+                option_num = int(nav)
+                if 1 <= option_num <= total_options:
+                    return option_num
+                else:
+                    print(f"Invalid option. Please enter a number between 1 and {total_options}.")
+            else:
+                print("Invalid input. Please try again.")
 
     def user_interaction_update_sort_by(self):
         if self.current_url == self.start_url:

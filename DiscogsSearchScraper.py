@@ -46,57 +46,201 @@ class DiscogsSearchScraper(BaseScraper):
         return aside_navbar_content, center_releases_content, applied_filters, new_applied_filters_list, sort_by
 
     def get_aside_navbar_content(self, SoupObj):
+        """
+        Parse the sidebar filter navigation from Discogs search page.
+        Updated for new Discogs HTML structure (as of 2025).
+        
+        The new structure uses:
+        - <aside> tag instead of id="page_aside"
+        - <h2> tags with "font-bold" class for filter categories
+        - <button> elements for filter options instead of links
+        - Filter URLs are constructed by clicking buttons (JavaScript interaction)
+        """
         aside_navbar_content = {}
         applied_filters = []
         new_applied_filters_list = []
-        left_side_menu_html = SoupObj.find(id="page_aside")
-        left_side_menu_html.find_all()
-        applied_filters_html = left_side_menu_html.find('ul', class_='explore_filters facets_nav selected_facets')
-        if applied_filters_html is not None:
-            applied_filters = [li.text for li in applied_filters_html.find_all('li')]
-            applied_filters = self.clean_applied_filters(applied_filters)
-            first_filt_words = [x.split('+')[0] for x in applied_filters]
-        else:
-            first_filt_words = []
-        left_side_facets = left_side_menu_html.find_all('h2', class_="facets_header")
-        for i, h2_ in enumerate(left_side_facets):
-            if len(left_side_facets) == 1:
-                print("No additional search options, remove some to proceed.")
-                return aside_navbar_content, applied_filters
-            else:
-                if 'Applied Filters' in h2_.text:
-                    continue
-                if h2_.findNext('div', class_='more_facets_dialog') is None:
-                    __intermediate_level__ = h2_.findNext('ul', class_='no_vertical facets_nav')
-                    facets_nav_uls = [__intermediate_level__]
-
-                else:
-                    __intermediate_level__ = h2_.findNext('div', class_="more_facets_dialog")
-                    facets_nav_uls = __intermediate_level__.find_all('ul')
-
-            header_name = h2_.getText()
+        
+        # Find the aside element (new structure)
+        left_side_menu_html = SoupObj.find('aside')
+        
+        if left_side_menu_html is None:
+            print("Warning: No aside element found on page")
+            return aside_navbar_content, applied_filters, new_applied_filters_list
+        
+        # Find all filter category headers
+        # Headers are h2 tags with class containing "font-bold"
+        left_side_facets = left_side_menu_html.find_all('h2', class_=lambda x: 'font-bold' in x if x else False)
+        
+        if not left_side_facets:
+            print("Warning: No filter headers found")
+            return aside_navbar_content, applied_filters, new_applied_filters_list
+        
+        for h2_ in left_side_facets:
+            header_name = h2_.text.strip().title()
+            
+            # Handle "Applied Filters" section separately
+            if 'applied' in header_name.lower() and 'filter' in header_name.lower():
+                # Extract applied filters
+                parent_div = h2_.find_parent('div')
+                if parent_div:
+                    ul = parent_div.find('ul')
+                    if ul:
+                        # Applied filters are in li tags with a span containing the filter text
+                        filter_items = ul.find_all('li', recursive=False)
+                        for li in filter_items:
+                            # Find the span with the filter value
+                            filter_span = li.find('span', class_=lambda x: 'leading-none' in x if x else False)
+                            if filter_span:
+                                filter_value = filter_span.text.strip()
+                                if filter_value:
+                                    applied_filters.append(filter_value)
+                continue
+            
+            # Process regular filter categories (Genre, Style, Format, etc.)
             self.search_options_dict[header_name] = {}
             aside_navbar_content[header_name] = {}
-            for ul in facets_nav_uls:
-                try:
-                    for li in ul.find_all('li'):
-                        facet_name = li.find('span', class_='facet_name').text
-                        href = li.find('a')['href']
-                        search_term = href.split('?')[-1]
-                        __search_term = search_term.split('=')
-                        ____search_term = [term.split('&') for term in __search_term]
-                        # code to flatten list ____search_term into a single 1 dimensional list
-                        new_applied_filters_list = [item for sublist in ____search_term for item in sublist]
-                        # Reverse the list and assign to a new variable
-                        # if new_applied_filters_list equal or larger than 4
-                        if len(new_applied_filters_list) >= 2:
-                            #slice last two indexes from new_applied_filters_list out of the list
-                            new_applied_filters_list = new_applied_filters_list[:-2]
-                            new_applied_filters_list = new_applied_filters_list[::-1]
-                        aside_navbar_content[header_name][facet_name] = href
-                except AttributeError:
-                    pass
+            
+            # Find the parent div containing this h2
+            parent_div = h2_.find_parent('div')
+            if parent_div:
+                # Find the ul containing filter options
+                ul = parent_div.find('ul')
+                if ul:
+                    # Find all list items with filter buttons
+                    list_items = ul.find_all('li', class_=lambda x: 'text-sm' in x if x else False)
+                    
+                    for li in list_items:
+                        # Find the button containing the filter name
+                        button = li.find('button', class_=lambda x: 'cursor-pointer' in x if x else False)
+                        if button:
+                            facet_name = button.text.strip()
+                            
+                            # Find the count span (if present)
+                            count_span = li.find('span', class_=lambda x: 'text-gray-600' in x if x else False)
+                            count = count_span.text.strip() if count_span else '0'
+                            
+                            # Construct the filter URL based on the category and value
+                            # The URL pattern is: ?category_exact=Value
+                            category_param = header_name.lower().replace(' ', '_')
+                            
+                            # Special cases for parameter names
+                            if category_param == 'decade':
+                                filter_param = f"{category_param}={facet_name}"
+                            elif category_param == 'year':
+                                filter_param = f"year={facet_name}"
+                            else:
+                                filter_param = f"{category_param}_exact={facet_name.replace(' ', '+')}"
+                            
+                            # Construct full URL with filter
+                            base_url = self.current_url.split('?')[0]
+                            current_params = self.current_url.split('?')[1] if '?' in self.current_url else ''
+                            
+                            # Add the new filter parameter
+                            if current_params:
+                                href = f"{base_url}?{current_params}&{filter_param}"
+                            else:
+                                href = f"{base_url}?{filter_param}"
+                            
+                            # Store the filter option
+                            aside_navbar_content[header_name][f"{facet_name} ({count})"] = href
+                            
+                            # Build the filter list for tracking
+                            new_applied_filters_list.append(filter_param)
+        
         return aside_navbar_content, applied_filters, new_applied_filters_list
+
+    def get_all_filter_options_with_selenium(self, category_name):
+        """
+        Use Selenium to click the 'All' button and get all filter options from the expanded dialog.
+        This is necessary because Discogs only shows 5 options initially, but has 700+ options in dialogs.
+        
+        Args:
+            category_name: The filter category (e.g., 'Genre', 'Style', 'Format', 'Country', 'Decade')
+        
+        Returns:
+            dict: {option_name: href, ...} with all available options for that category
+        """
+        from selenium.webdriver.common.by import By
+        from bs4 import BeautifulSoup
+        import time
+        
+        all_options = {}
+        driver = None
+        
+        try:
+            # Create Selenium driver
+            driver = self.create_driver_with_random_user_agent()
+            driver.get(self.current_url)
+            time.sleep(3)
+            
+            # Find all "All▾" buttons
+            all_buttons = driver.find_elements(By.TAG_NAME, 'button')
+            expand_buttons = [btn for btn in all_buttons if 'All' in btn.text and '▾' in btn.text]
+            
+            # Map category names to button indices
+            category_index_map = {
+                'genre': 0,
+                'style': 1,
+                'format': 2,
+                'country': 3,
+                'decade': 4,
+                'year': 4  # Decade and Year are the same
+            }
+            
+            category_lower = category_name.lower()
+            if category_lower not in category_index_map:
+                print(f"Warning: Unknown category '{category_name}'")
+                return all_options
+            
+            button_index = category_index_map[category_lower]
+            
+            if button_index >= len(expand_buttons):
+                print(f"Warning: Not enough expand buttons found (need {button_index + 1}, have {len(expand_buttons)})")
+                return all_options
+            
+            # Click the appropriate "All" button
+            expand_buttons[button_index].click()
+            time.sleep(2)
+            
+            # Parse the dialog
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            dialog = soup.find(attrs={'role': 'dialog'})
+            
+            if dialog:
+                # Find all filter option links in the dialog
+                links = dialog.find_all('a', class_=lambda x: 'text-blue-800' in x if x else False)
+                
+                for link in links:
+                    name = link.text.strip()
+                    href = link.get('href', '')
+                    
+                    # Find the count
+                    parent = link.find_parent('li')
+                    if parent:
+                        count_span = parent.find('span', class_=lambda x: 'text-gray-600' in x if x else False)
+                        count = count_span.text.strip() if count_span else ''
+                        
+                        # Store with count in the name
+                        option_key = f"{name} ({count})" if count else name
+                        
+                        # Store just the relative href (it will be properly converted later)
+                        # Don't prepend base_discogs_url here - it causes double URL issue
+                        all_options[option_key] = href
+                
+                print(f"✓ Loaded {len(all_options)} {category_name} options from expanded dialog")
+            else:
+                print(f"Warning: Dialog not found after clicking {category_name} All button")
+        
+        except Exception as e:
+            print(f"Error getting all {category_name} options: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        finally:
+            if driver:
+                driver.quit()
+        
+        return all_options
 
     def get_center_releases_content(self, SoupObj):
         a_tags = SoupObj.find_all('a', class_='thumbnail_link')

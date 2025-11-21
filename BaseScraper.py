@@ -3,9 +3,9 @@ import requests
 import time
 import random
 import datetime
-#from urllib.request import Request, urlopen
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from fake_useragent import UserAgent
 import pandas as pd
 import sqlite3
@@ -32,26 +32,51 @@ class BaseScraper(DatabaseManager):
         return df
 
     def create_driver_with_random_user_agent(self):
-        # Create a random user agent
+        """
+        Create a Selenium WebDriver with stealth options to avoid bot detection.
+        Uses standard Selenium ChromeDriver with anti-detection measures.
+        Tested and proven to work in Docker environments.
+        """
         user_agent = UserAgent().random
-
-        # Set Chrome options for headless browsing and user agent
         options = Options()
+        
+        # Essential options for Docker/headless operation
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        
+        # Anti-detection options
+        options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(f"user-agent={user_agent}")
-        # Set the browser to run headlessly
-        options.add_argument("--headless")
-
-        # Obfuscate WebDriver
-        options.add_argument("disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
-
-        # Create the Chrome WebDriver with the specified options
-        driver = webdriver.Chrome(options=options)
-
-        # Modify JavaScript properties to prevent WebDriver detection
+        
+        # Additional stealth options
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disable-sync")
+        options.add_argument("--disable-translate")
+        options.add_argument("--disable-features=NetworkService,NetworkServiceInProcess")
+        
+        # Randomize window size to appear more human-like
+        width = random.randint(1200, 1920)
+        height = random.randint(800, 1080)
+        options.add_argument(f"--window-size={width},{height}")
+        
+        # Set binary location
+        options.binary_location = "/usr/bin/chromium"
+        
+        # Create driver with Service
+        service = Service("/usr/bin/chromedriver")
+        driver = webdriver.Chrome(service=service, options=options)
+        
+        # Execute script to hide webdriver property
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
+        
         return driver
 
     def createSoupObjFromUrlUrllib(self, url):
